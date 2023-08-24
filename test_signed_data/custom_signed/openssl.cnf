@@ -1,0 +1,17 @@
+[ req ]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_ca
+
+[ req_distinguished_name ]
+commonName = Common Name
+commonName_default = TotallyFakeTestDomain.com
+countryName              = Country Name (2 letter code)
+countryName_default      = US
+countryName_min          = 2
+countryName_max          = 2
+organizationName         = Organization Name (eg, company)
+organizationName_default = TotallyFakeTestDomain, Inc.
+
+[ v3_ca ]
+basicConstraints = CA:TRUE
+keyUsage = digitalSignature, keyCertSign

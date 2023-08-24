@@ -1,0 +1,28 @@
+# Cargo.lock
+**/target
+
+# IDE
+.vscode
+
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+node_modules
+*.node
+*.yarn
+build/
+
+# certificate extensions
+*.pfx
+*.key
+*.crt
+*.csr
+
+help.txt
+
+*.tgz

@@ -1,0 +1,11 @@
+{
+  "name": "examples",
+  "version": "0.0.1",
+  "description": "See examples of how the code is used",
+  "main": "src/wmi.mjs",
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "whimy": "file:.."
+  }
+}

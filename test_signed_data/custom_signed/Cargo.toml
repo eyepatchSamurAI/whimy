@@ -1,0 +1,54 @@
+[package]
+name = "signed_exe"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+#signtool sign /fd SHA256 /a /f myCertificate.pfx /p myPassword myExecutable.exe
+# C:\Users\video\Desktop\myGithub\eyepatchSamurAI11\wmi\test_signing\signed_exe\target\release\signed_exe.exe
+
+# $cert = New-SelfSignedCertificate -DnsName "yourtestdomain.com", "yourtestdomain.com" -CertStoreLocation "cert:\LocalMachine\My"
+# $pwd = ConvertTo-SecureString -String "your-password" -Force -AsPlainText
+# Export-PfxCertificate -cert "cert:\localMachine\my\$($cert.Thumbprint)" -FilePath ".\target\release\certificate.pfx" -Password $pwd
+
+
+# $cert = New-SelfSignedCertificate -DnsName "yourtestdomain.com", "yourtestdomain.com" -CertStoreLocation "cert:\LocalMachine\My"
+# $pwd = ConvertTo-SecureString -String "superpassword" -Force -AsPlainText
+# Export-PfxCertificate -cert "cert:\localMachine\my\$($cert.Thumbprint)" -FilePath ".\certificate.pfx" -Password $pwd
+# & "C:\Program Files (x86)\Windows Kits\10\App Certification Kit\signtool.exe" sign /f .\certificate.pfx /p "superpassword" .\target\release\signed_exe.exe
+
+
+# $cert = New-SelfSignedCertificate -DnsName "yourtestdomain.com" -CertStoreLocation "cert:\LocalMachine\My" -KeyUsage DigitalSignature -Type CodeSigningCert
+# $pwd = ConvertTo-SecureString -String "superpassword" -Force -AsPlainText
+# Export-PfxCertificate -cert "cert:\localMachine\my\$($cert.Thumbprint)" -FilePath ".\certificate.pfx" -Password $pwd
+# & "C:\Program Files (x86)\Windows Kits\10\App Certification Kit\signtool.exe" sign /f .\certificate.pfx /p "superpassword" .\target\release\signed_exe.exe
+# Now I gotta You can add the self-signed certificate to your Trusted Root Certification Authorities store using the Microsoft Management Console (MMC) with the Certificates snap-in. Here are the steps:
+# 1. Run MMC by searching for it in the Start Menu or by using the Run dialog (Win + R) and typing mmc.
+# 2. In MMC, go to File > Add/Remove Snap-in.
+# 3. In the Add/Remove Snap-in dialog, choose Certificates and click Add.
+# 4. Choose Computer account and click Next.
+# 5. Choose Local computer and click Finish.
+# 6. Click OK to close the Add/Remove Snap-in dialog.
+# 7. In the console tree, expand Certificates (Local Computer), then Trusted Root Certification Authorities, then Certificates.
+# 8. Right-click on Certificates and choose All Tasks > Import.
+# 9. In the Certificate Import Wizard, browse to the location of your .pfx file, enter the password, and choose to place all certificates in the following store: Trusted Root Certification Authorities.
+
+# This is what you get if you self sign and do not add to your own trusted domain
+# `TrustStatus { signed: false, message: "Sign subject info is empty.", subject: "" }`
+
+# signtool sign /fd SHA256 /a /f .\certificate.pfx /p $pwd .\target\release\signed_exe.exe
+# certmgr.msc - Intermidate Certificates has the yourtestdomain sert
+
+# convert pfx to pem
+# openssl pkcs12 -in ./certificate.pfx -out certificate.pem -nodes
+
+# Get Publishers distinguished name
+# openssl x509 -in ./certificate.pem -noout -subject -nameopt RFC2253
+
+# my DN - subject=CN=yourtestdomain.com
+# &$signTool verify /pa /v .\target\release\signed_exe.exe # Verify a signed exe
+
+
+#cargo test -- --nocapture
