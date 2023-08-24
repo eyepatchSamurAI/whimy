@@ -44,7 +44,7 @@ impl Wmi {
   #[napi]
   /// Query the COM service previously initalted and get back a json parsable response
   ///
-  /// ```javascript
+  /// ```
   /// import {WMI} from 'wmi'
   /// const wmi = new WMI(`root\\cimv2`);
   /// const queryString = wmi.query("Select * From Win32_processor");
@@ -67,7 +67,7 @@ impl Wmi {
       }
     }
   }
-  #[napi]
+  
   /// Stop the connection between your server and COM
   /// Must be called after you are done making calls to Windows otherwise the COM library will remain locked
   /// This can result is resource leakage or degrade performance.
@@ -79,7 +79,8 @@ impl Wmi {
   /// // Done with making calls to WMI
   /// wmi.stop(); // Very important
   /// ```
-  ///
+  /// 
+  #[napi]
   pub fn stop(&self) {
     self.query_handler.stop();
   }
@@ -92,7 +93,6 @@ impl Wmi {
 /// const output = verifySignatureByPublishName(filePath, ['CN="Microsoft Corporation",O="Microsoft Corporation",L=Redmond,S=Washington,C=US"'])
 /// console.log(output); 
 /// ```
-/// 
 /// 
 #[napi]
 pub fn verify_signature_by_publish_name(file_path: String, publish_names: Vec<String>) -> Result<TrustStatus>{
