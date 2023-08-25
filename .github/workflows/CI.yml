@@ -30,8 +30,6 @@ jobs:
         run: .\setting_up_cert_testing.ps1
         shell: powershell
         working-directory: ./test_signed_data/custom_signed
-      
-
 
       - name: Tests
         run : cargo test
