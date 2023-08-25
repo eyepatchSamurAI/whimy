@@ -5,7 +5,7 @@ $password = "password"
 $name = "customCert"
 $certificatePath = ".\$name.pfx"
 $secureStringPassword = ConvertTo-SecureString -String $password -Force -AsPlainText
-$customExePath - ".\target\release\signed_exe.exe"
+$customExePath - ".\test_signed_data\custom_signed\target\release\signed_exe.exe"
 
 cargo build --release
 
