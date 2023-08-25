@@ -10,11 +10,10 @@ extern crate napi_derive;
 use napi::Result;
 use verify_signature::TrustStatus;
 use wmi_query_handler::WMIQueryHandler;
-use crate::verify_signature::verify_signature;
+use crate::verify_signature::verify_signature_by_publisher;
 
 #[napi]
 pub struct Wmi {
-  /// Handles query calls to WMI
   query_handler: WMIQueryHandler,
 }
 
@@ -88,13 +87,13 @@ impl Wmi {
 
 /// Verifies a file given a list of publisher names
 /// ```
-/// import { verifySignatureByPublishName } from "whimy"
+/// import { verifySignatureByPublishNames } from "whimy"
 /// const filePath = resolve(directoryName, '../../test_signed_data/signed_exes/microsoft_signed.exe');
-/// const output = verifySignatureByPublishName(filePath, ['CN="Microsoft Corporation",O="Microsoft Corporation",L=Redmond,S=Washington,C=US"'])
+/// const output = verifySignatureByPublishNames(filePath, ['CN="Microsoft Corporation",O="Microsoft Corporation",L=Redmond,S=Washington,C=US"'])
 /// console.log(output); 
 /// ```
 /// 
 #[napi]
-pub fn verify_signature_by_publish_name(file_path: String, publish_names: Vec<String>) -> Result<TrustStatus>{
-  verify_signature(file_path, publish_names)
+pub fn verify_signature_by_publisher_names(file_path: String, publish_names: Vec<String>) -> Result<TrustStatus>{
+  verify_signature_by_publisher(file_path, publish_names)
 }

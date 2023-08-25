@@ -207,7 +207,7 @@ fn check_dn_match(subject: &HashMap<String, String>, name: &str) -> napi::Result
 }
 
 fn validate_signed_file(path: &Path) -> napi::Result<()> {
-  let allowed_extensions = ["exe", "cab", "dll", "ocx", "msi", "msix", "xpi"];
+  let allowed_extensions = allowed_extensions();
 
   let file_extension: Result<&str, &str> = path
     .extension()
@@ -230,14 +230,18 @@ fn validate_signed_file(path: &Path) -> napi::Result<()> {
   Ok(())
 }
 
-pub fn verify_signature(
+pub fn allowed_extensions() -> &'static [&'static str] {
+  &["exe", "cab", "dll", "ocx", "msi", "msix", "xpi"]
+}
+
+pub fn verify_signature_by_publisher(
   file_path: String,
   publish_names: Vec<String>,
 ) -> napi::Result<TrustStatus> {
   let trimmed_path = file_path.trim_end();
   let path: &Path = Path::new(trimmed_path);
   validate_signed_file(path)?;
-  let result = verify_signature_by_publish_name(path)?;
+  let result = verify_signature_from_path(path)?;
   if !result.signed {
     return Ok(result);
   }
@@ -261,7 +265,7 @@ pub fn verify_signature(
   })
 }
 
-fn verify_signature_by_publish_name(file_path: &Path) -> napi::Result<TrustStatus> {
+fn verify_signature_from_path(file_path: &Path) -> napi::Result<TrustStatus> {
   let mut trust_status = TrustStatus::new();
 
   let constant_wstring_bytes = OsStr::new(&file_path)
@@ -352,7 +356,7 @@ fn verify_signature_by_publish_name(file_path: &Path) -> napi::Result<TrustStatu
     crypt_provider_signer
       .as_ref()
       .and_then(|signer| signer.pChainContext.as_ref())
-      .map(|chain_context| get_subject(*chain_context))
+      .map(|chain_context| get_certificate_subject(*chain_context))
   };
   trust_status.subject = sign_subject
     .as_ref()
@@ -372,15 +376,9 @@ fn verify_signature_by_publish_name(file_path: &Path) -> napi::Result<TrustStatu
   Ok(trust_status)
 }
 
-fn get_subject(cert_chain_context: CERT_CHAIN_CONTEXT) -> String {
+fn get_certificate_subject(cert_chain_context: CERT_CHAIN_CONTEXT) -> String {
   let mut subject: String = String::new();
-  // let publisher_chain = unsafe {
-  //   cert_chain_context
-  //     .rgpChain
-  //     .as_ref()
-  //     .map(|f| f)
-  //     .and_then(|b| Some(b.rgpElement))
-  // };
+
   let publisher_chain = unsafe {
     cert_chain_context
       .rgpChain
@@ -445,6 +443,8 @@ mod test {
   const SIGNED_PATH: &str = "./test_signed_data/signed_exes";
 
   fn trust_status_eq(trusted_status: &TrustStatus, expected: &TrustStatus) -> bool {
+    println!("expected {:?}", expected);
+    println!("trusted_status {:?}", trusted_status);
     if trusted_status.signed != expected.signed || trusted_status.message != expected.message {
       return false;
     }
@@ -453,6 +453,9 @@ mod test {
     }
     let expected_subject_map = parse_dn(&expected.subject);
     let trusted_subject_map = parse_dn(&trusted_status.subject);
+
+    println!("expected_subject_map {:?}", expected_subject_map);
+    println!("trusted_subject_map {:?}", trusted_subject_map);
 
     assert_eq!(expected_subject_map, trusted_subject_map);
     true
@@ -503,7 +506,7 @@ mod test {
     let publisher_names = vec![String::from(
       r#"CN="Microsoft Corporation",L="Redmond",O="Microsoft Corporation",OU="Microsoft Corporation",C="US",S="Washington""#,
     )];
-    let signature_status = verify_signature(file_path.to_string(), publisher_names);
+    let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
     let expected_subject = String::from(
       r#"S="Washington",L="Redmond",OU="Microsoft Corporation",C="US",CN="Microsoft Corporation",SERIALNUMBER="230865+470561",O="Microsoft Corporation","#,
     );
@@ -515,13 +518,14 @@ mod test {
     assert!(signature_status.is_ok());
     assert!(trust_status_eq(&signature_status.unwrap(), &expected));
   }
+
   #[test]
   fn test_signature_for_dll() {
     let file_path = format!("{SIGNED_PATH}/signed.dll");
     let publisher_names = vec![String::from(
       r#"CN="Valve",L="Bellevue",O="Valve",C="US",S="WA""#,
     )];
-    let signature_status = verify_signature(file_path.to_string(), publisher_names);
+    let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
     let expected_subject = String::from(r#"S="WA",L="Bellevue",C="US",CN="Valve",O="Valve","#);
     let expected = TrustStatus {
       message: "Verification succeeded!".to_string(),
@@ -531,13 +535,14 @@ mod test {
     assert!(signature_status.is_ok());
     assert!(trust_status_eq(&signature_status.unwrap(), &expected));
   }
+
   #[test]
   fn test_unsigned() {
     let file_path = format!("{SIGNED_PATH}/unsigned.dll");
     let publisher_names = vec![String::from(
       r#"CN="Microsoft Corporation",L="Redmond",O="Microsoft Corporation",OU="Microsoft Corporation",C="US",S="Washington""#,
     )];
-    let signature_status = verify_signature(file_path.to_string(), publisher_names);
+    let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
     println!("signature_status: {:?}", signature_status);
 
     let expected = TrustStatus {
@@ -552,7 +557,7 @@ mod test {
   fn test_incorrect_extension() {
     let file_path = format!("{SIGNED_PATH}/empty.txt");
     let publisher_names = vec![String::from(r#"CN="Microsoft Corporation""#)];
-    let signature_status = verify_signature(file_path.to_string(), publisher_names);
+    let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
     let expected_error_string = "Accepted file types are: exe,cab,dll,ocx,msi,msix,xpi";
 
     assert!(&signature_status.is_err());
@@ -560,11 +565,12 @@ mod test {
   }
   #[test]
   fn test_custom_signature() {
+    // If this test is failing try running setting_up_cert_testing.ps1
     let file_path = format!("{SIGNED_PATH}/custom_signed_exe.exe");
     let publisher_names = vec![String::from(
       r#"O="TotallyFakeTestDomain, Inc.",C=US,CN=TotallyFakeTestDomain.com"#,
     )];
-    let signature_status = verify_signature(file_path.to_string(), publisher_names);
+    let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
     let expected_subject =
       String::from(r#"O="TotallyFakeTestDomain, Inc.",C="US",CN="TotallyFakeTestDomain.com","#);
     let expected = TrustStatus {

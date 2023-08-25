@@ -33,7 +33,7 @@ impl WMIQueryHandler {
   pub fn new(service_type: String) -> napi::Result<Self> {
     unsafe {
       CoInitializeEx(None, COINIT_MULTITHREADED)
-        .map_err(|_error| napi::Error::from_reason("Failed to Initalize COM"))?;
+        .map_err(|_error| napi::Error::from_reason("Failed to Initialize COM"))?;
     };
 
     unsafe {
@@ -49,7 +49,7 @@ impl WMIQueryHandler {
         None,
       )
     }
-    .map_err(|_error| napi::Error::from_reason("Failed to initalize security"))?;
+    .map_err(|_error| napi::Error::from_reason("Failed to initialize security"))?;
 
     let locator: IWbemLocator =
       unsafe { CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER) }
@@ -253,16 +253,4 @@ fn safe_array_to_string(safe_array: &SAFEARRAY, offset: isize) -> String {
     String::from_utf16_lossy(slice)
   };
   property_name_str
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*; // Import functions from the parent module
-
-  #[test]
-  fn test() {
-    let wmi = WMIQueryHandler::new("root\\cimv2".to_owned()).unwrap();
-    let vv = wmi.execute_query("select Name, ProcessId from Win32_Process".to_owned());
-    println!("{:?}", vv);
-  }
 }
