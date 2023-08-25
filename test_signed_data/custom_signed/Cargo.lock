@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "signed_exe"
+name = "custom_signed_exe"
 version = "0.1.0"

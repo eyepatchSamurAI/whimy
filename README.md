@@ -2,7 +2,14 @@
 
 # Whimy
 
-A collection of low level Windows tools exposed to node
+In the landscape of Node.js projects that interface with Windows systems, it's common to rely on PowerShell commands for retrieving essential system information. However, this approach poses a security risk and is usually much slower.
+
+Underneath the hood, Whimy leverages Windows Management Instrumentation (WMI) to fetch system data, bypassing the need for potentially hazardous PowerShell commands.
+
+By adopting Whimy, developers gain:
+
+- 🔒 Enhanced Security: Eliminate the security vulnerabilities associated with executing PowerShell commands.
+- 🚀 Improved Performance: Benefit from the efficiency of direct WMI calls, significantly speeding up data retrieval.
 
 ## Features
 
@@ -40,4 +47,4 @@ console.log(output);
 
 ## Contributing
 
-Any contributions are welcome! You can either make an issue or you can create a pull request yourself.
+Any contributions are welcome! You can either create an issue or you can create a pull request yourself.

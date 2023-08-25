@@ -13,7 +13,14 @@ The custom signed is made so we can easily generate and sign an exe to test vari
 - verify signing by running `.\check_cert.ps1`
 
 
-### How to find custon Certificate
+### How to find custom Certificate
+Method one:
+- Manage user certificates
+- Click Trusted Root Certification Authorities
+- Inside the Certificates folder you should see the fake domain name
+
+Method two:
+
 Once signed, you can find your certificate here: Cert:\LocalMachine\Root
 As of now if the cert is stored somewhere like Cert:\LocalMachine\My then it will not be able to verify the certificate.
 To get there from a GUI
