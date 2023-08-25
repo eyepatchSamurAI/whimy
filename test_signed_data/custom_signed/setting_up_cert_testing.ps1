@@ -5,12 +5,8 @@ $password = "password"
 $name = "customCert"
 $certificatePath = ".\$name.pfx"
 $secureStringPassword = ConvertTo-SecureString -String $password -Force -AsPlainText
+$customExePath - ".\target\release\signed_exe.exe"
 
-# Check if running as administrator
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Host "This script requires elevated permissions. Run as Administrator."
-    exit
-}
 cargo build --release
 
 # Generate the PFX
@@ -23,4 +19,4 @@ openssl pkcs12 -export -out "$name.pfx" -inkey "$name.key" -in "$name.crt"
 $cert = Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\LocalMachine\Root -Password $secureStringPassword
 
 # Sign exe
-&$signTool sign /fd SHA256 /td sha256 /tr http://timestamp.digicert.com /f .\$name.pfx /p $password .\target\release\signed_exe.exe
+&$signTool sign /fd SHA256 /td sha256 /tr http://timestamp.digicert.com /f .\$name.pfx /p $password $customExePath

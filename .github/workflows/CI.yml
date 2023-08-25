@@ -25,7 +25,11 @@ jobs:
 
       - name: Lint
         run: cargo clippy
-        
+
+      - name: Setup certificate
+        run: .\test_signed_data\custom_signed\setting_up_cert_testing.ps1
+        shell: powershell
+
       - name: Tests
         run : cargo test
       
@@ -33,7 +37,6 @@ jobs:
         run: | 
           yarn install
           yarn build
-
 
       - name: Publish
         run: npm publish --provenance --access public
