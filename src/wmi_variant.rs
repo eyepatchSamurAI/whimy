@@ -1,5 +1,5 @@
 use serde::{Serialize, Serializer};
-use windows::Win32::System::Com::{
+use windows::Win32::System::Variant::{
   VARIANT, VT_BOOL, VT_BSTR, VT_EMPTY, VT_I2, VT_I4, VT_I8, VT_NULL, VT_R4, VT_R8, VT_UI1, VT_UINT,
 };
 
@@ -11,7 +11,7 @@ pub enum WMIVariant {
   I8(i64),
   R4(i32),
   R8(f64),
-  UINT(u32),
+  Uint(u32),
   UI1(u8),
   Bool(bool),
 }
@@ -46,7 +46,7 @@ pub fn process_variant(value_data: &VARIANT) -> Option<WMIVariant> {
     }
     VT_UINT => {
       let int_val = unsafe { value_data.Anonymous.Anonymous.Anonymous.uintVal };
-      Some(WMIVariant::UINT(int_val))
+      Some(WMIVariant::Uint(int_val))
     }
     VT_UI1 => {
       let int_val = unsafe { value_data.Anonymous.Anonymous.Anonymous.bVal };
@@ -68,13 +68,13 @@ impl Serialize for WMIVariant {
     S: Serializer,
   {
     match self {
-      WMIVariant::BStr(s) => serializer.serialize_str(&s),
+      WMIVariant::BStr(s) => serializer.serialize_str(s),
       WMIVariant::I2(i) => serializer.serialize_i16(*i),
       WMIVariant::I4(i) => serializer.serialize_i32(*i),
       WMIVariant::I8(i) => serializer.serialize_i64(*i),
       WMIVariant::R4(i) => serializer.serialize_i32(*i),
       WMIVariant::R8(f) => serializer.serialize_f64(*f),
-      WMIVariant::UINT(u) => serializer.serialize_u32(*u),
+      WMIVariant::Uint(u) => serializer.serialize_u32(*u),
       WMIVariant::UI1(u) => serializer.serialize_u8(*u),
       WMIVariant::Bool(b) => serializer.serialize_bool(*b),
     }

@@ -27,11 +27,7 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@napi-rs/cli": "^2.16.2",
-    "ava": "^5.1.1"
-  },
-  "ava": {
-    "timeout": "3m"
+    "@napi-rs/cli": "^2.16.3"
   },
   "engines": {
     "node": ">= 10"
@@ -42,7 +38,6 @@
     "build": "napi build --platform --release build",
     "build:debug": "napi build --platform",
     "prepublishOnly": "napi prepublish -t npm",
-    "test": "ava",
     "universal": "napi universal",
     "version": "napi version"
   },

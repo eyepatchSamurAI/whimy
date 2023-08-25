@@ -60,10 +60,10 @@ impl Wmi {
         Ok(json)
       }
       None => {
-        return Err(napi::Error::new(
+        Err(napi::Error::new(
           napi::Status::GenericFailure,
           "query parameter is not provided",
-        ));
+        ))
       }
     }
   }

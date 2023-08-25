@@ -6,17 +6,18 @@ use windows::{
     Com::{
       CoCreateInstance, CoInitializeEx, CoInitializeSecurity, CoSetProxyBlanket, CoUninitialize,
       CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, EOAC_NONE, RPC_C_AUTHN_LEVEL_CALL,
-      RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE, SAFEARRAY, VARIANT,
+      RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE, SAFEARRAY,
     },
-    Ole::{SafeArrayDestroy, SafeArrayLock, VariantClear},
+    Ole::{SafeArrayDestroy, SafeArrayLock},
     Rpc::{RPC_C_AUTHN_NONE, RPC_C_AUTHN_WINNT},
+    Variant::{VariantClear, VARIANT},
     Wmi::{
       IEnumWbemClassObject, IWbemClassObject, IWbemLocator, IWbemServices, WbemLocator,
-      WBEM_FLAG_FORWARD_ONLY, WBEM_FLAG_RETURN_IMMEDIATELY, WBEM_INFINITE,
+      WBEM_CONDITION_FLAG_TYPE, WBEM_FLAG_FORWARD_ONLY, WBEM_FLAG_RETURN_IMMEDIATELY,
+      WBEM_INFINITE,
     },
   },
 };
-
 type QueryResult = HashMap<String, Vec<Option<WMIVariant>>>;
 
 pub struct WMIQueryHandler {
@@ -30,8 +31,10 @@ impl WMIQueryHandler {
     }
   }
   pub fn new(service_type: String) -> napi::Result<Self> {
-    let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
-      .map_err(|_error| napi::Error::from_reason("Failed to Initalize COM"))?;
+    unsafe {
+      CoInitializeEx(None, COINIT_MULTITHREADED)
+        .map_err(|_error| napi::Error::from_reason("Failed to Initalize COM"))?;
+    };
 
     unsafe {
       CoInitializeSecurity(
@@ -87,7 +90,7 @@ impl WMIQueryHandler {
   }
 
   fn execute_wmi_query(&self, query: &str) -> napi::Result<IEnumWbemClassObject> {
-    let query_execution_result = unsafe {
+    unsafe {
       self
         .server
         .ExecQuery(
@@ -102,8 +105,7 @@ impl WMIQueryHandler {
             query, _error
           ))
         })
-    };
-    return query_execution_result;
+    }
   }
 
   fn get_row_results(
@@ -122,7 +124,7 @@ impl WMIQueryHandler {
         })?
     }
 
-    return Ok(row[0].to_owned());
+    Ok(row[0].to_owned())
   }
 
   fn create_safe_array<'a>(
@@ -130,12 +132,18 @@ impl WMIQueryHandler {
     variant_ptr: *mut VARIANT,
   ) -> napi::Result<&'a SAFEARRAY> {
     let safe_array = unsafe {
-      row.GetNames(None, 64, variant_ptr).map_err(|_error| {
-        napi::Error::from_reason(format!(
-          "Failed to retrieve property names for the current row. Original error: {}",
-          _error
-        ))
-      })?
+      row
+        .GetNames(
+          None,
+          WBEM_CONDITION_FLAG_TYPE(64),
+          variant_ptr,
+        )
+        .map_err(|_error| {
+          napi::Error::from_reason(format!(
+            "Failed to retrieve property names for the current row. Original error: {}",
+            _error
+          ))
+        })?
     };
 
     unsafe {
@@ -184,7 +192,7 @@ impl WMIQueryHandler {
       let _ = Box::from_raw(variant_data_ptr);
     }
 
-    return Ok(wmi_variant);
+    Ok(wmi_variant)
   }
 
   fn extract_variant_data_and_update_results(
@@ -197,12 +205,12 @@ impl WMIQueryHandler {
     let safe_array: &SAFEARRAY = WMIQueryHandler::create_safe_array(row_results, variant_ptr)?;
 
     for i in 0..safe_array.rgsabound[0].cElements as isize {
-      let property_name = safe_array_to_string(&safe_array, i);
+      let property_name = safe_array_to_string(safe_array, i);
       let wmi_variant = WMIQueryHandler::get_variant_data(&property_name, row_results)?;
 
       query_result_map
-        .entry(format!("{}", &property_name))
-        .or_insert(Vec::new())
+        .entry(property_name)
+        .or_default()
         .push(wmi_variant);
     }
 
@@ -220,7 +228,7 @@ impl WMIQueryHandler {
       // Once this goes in a Box and leaves scope it will clean up the pointer
       let _ = Box::from_raw(variant_ptr);
     }
-    return Ok(());
+    Ok(())
   }
 
   pub fn execute_query(&self, query: String) -> napi::Result<QueryResult> {
@@ -244,7 +252,7 @@ fn safe_array_to_string(safe_array: &SAFEARRAY, offset: isize) -> String {
     let slice = std::slice::from_raw_parts(property_name, len);
     String::from_utf16_lossy(slice)
   };
-  return property_name_str;
+  property_name_str
 }
 
 #[cfg(test)]

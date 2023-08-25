@@ -58,7 +58,7 @@ fn create_publisher_mapping() -> HashMap<String, PCSTR> {
     "SERIALNUMBER".to_string(),
   ];
   // Distinguished Name
-  let dn_attribute_identifiers = vec![
+  let dn_attribute_identifiers = [
     szOID_COMMON_NAME,
     szOID_LOCALITY_NAME,
     szOID_ORGANIZATION_NAME,
@@ -189,6 +189,12 @@ impl TrustStatus {
   }
 }
 
+impl Default for TrustStatus {
+  fn default() -> Self {
+    TrustStatus::new()
+  }
+}
+
 fn check_dn_match(subject: &HashMap<String, String>, name: &str) -> napi::Result<bool> {
   let distingusihed_names_map = parse_dn(name);
   if !distingusihed_names_map.is_empty() {
@@ -201,7 +207,7 @@ fn check_dn_match(subject: &HashMap<String, String>, name: &str) -> napi::Result
 }
 
 fn validate_signed_file(path: &Path) -> napi::Result<()> {
-  let allowed_extensions = vec!["exe", "cab", "dll", "ocx", "msi", "msix", "xpi"];
+  let allowed_extensions = ["exe", "cab", "dll", "ocx", "msi", "msix", "xpi"];
 
   let file_extension: Result<&str, &str> = path
     .extension()
@@ -264,24 +270,24 @@ fn verify_signature_by_publish_name(file_path: &Path) -> napi::Result<TrustStatu
     .collect::<Vec<u16>>();
 
   let policy_guid: *mut GUID = &WINTRUST_ACTION_GENERIC_VERIFY_V2 as *const _ as *mut _;
-
-  let mut win_trust_file_info = WINTRUST_FILE_INFO::default();
-  win_trust_file_info.cbStruct = std::mem::size_of::<WINTRUST_FILE_INFO>() as u32;
-  win_trust_file_info.pcwszFilePath = PCWSTR::from_raw(constant_wstring_bytes.as_ptr()); // You have to put the ptr in here otherwise  is pointing to invalid memory by the time WinVerifyTrust is called.
-                                                                                         // The as_ptr() method will give you a pointer to the data, but it won't prevent the data from being dropped when it goes out of scope.
-  win_trust_file_info.hFile = HANDLE::default();
-
-  // Initalize the WinTrustData with the file path pointer
-  let mut win_trust_data: WINTRUST_DATA = WINTRUST_DATA::default();
-  win_trust_data.cbStruct = std::mem::size_of::<WINTRUST_DATA>() as u32; // Must set the memory size
-  win_trust_data.dwProvFlags = WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT;
-  win_trust_data.dwUIChoice = WTD_UI_NONE;
-  win_trust_data.fdwRevocationChecks = WTD_REVOKE_WHOLECHAIN;
-  win_trust_data.dwUnionChoice = WTD_CHOICE_FILE;
-  win_trust_data.dwStateAction = WTD_STATEACTION_VERIFY;
-  win_trust_data.dwUIContext = WTD_UICONTEXT_EXECUTE;
-  win_trust_data.hWVTStateData = HANDLE::default();
-
+  let mut win_trust_file_info = WINTRUST_FILE_INFO {
+    cbStruct: std::mem::size_of::<WINTRUST_FILE_INFO>() as u32,
+    pcwszFilePath: PCWSTR::from_raw(constant_wstring_bytes.as_ptr()), // You have to put the ptr in here otherwise  is pointing to invalid memory by the time WinVerifyTrust is called.
+    // The as_ptr() method will give you a pointer to the data, but it won't prevent the data from being dropped when it goes out of scope.
+    hFile: HANDLE::default(),
+    ..Default::default()
+  };
+  let mut win_trust_data = WINTRUST_DATA {
+    cbStruct: std::mem::size_of::<WINTRUST_DATA>() as u32,
+    dwProvFlags: WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT,
+    dwUIChoice: WTD_UI_NONE,
+    fdwRevocationChecks: WTD_REVOKE_WHOLECHAIN,
+    dwUnionChoice: WTD_CHOICE_FILE,
+    dwStateAction: WTD_STATEACTION_VERIFY,
+    dwUIContext: WTD_UICONTEXT_EXECUTE,
+    hWVTStateData: HANDLE::default(),
+    ..Default::default()
+  };
   win_trust_data.Anonymous.pFile = &mut win_trust_file_info as *mut _;
   let signature_status = unsafe {
     WinVerifyTrust(
@@ -297,20 +303,20 @@ fn verify_signature_by_publish_name(file_path: &Path) -> napi::Result<TrustStatu
       trust_status.message = "Verification succeeded!".to_string();
     }
     TRUST_E_NOSIGNATURE | TRUST_E_SUBJECT_FORM_UNKNOWN | TRUST_E_PROVIDER_UNKNOWN => {
-      trust_status.message = format!("The file is not signed.");
+      trust_status.message = "The file is not signed.".to_string();
       return Ok(trust_status);
     }
     TRUST_E_EXPLICIT_DISTRUST => {
       trust_status.message =
-        format!("Signature is present but is specifically disallowed by admin or user.");
+        "Signature is present but is specifically disallowed by admin or user.".to_string();
       return Ok(trust_status);
     }
     TRUST_E_SUBJECT_NOT_TRUSTED => {
-      trust_status.message = format!("Signature is present but subject not trusted.");
+      trust_status.message = "Signature is present but subject not trusted.".to_string();
       return Ok(trust_status);
     }
     CRYPT_E_SECURITY_SETTINGS => {
-      trust_status.message = format!("Signature was not explictly trusted by admin, and user trust has been disabled. No signature, publisher, or timestamp error.");
+      trust_status.message = "Signature was not explictly trusted by admin, and user trust has been disabled. No signature, publisher, or timestamp error.".to_string();
       return Ok(trust_status);
     }
     CRYPT_E_FILE_ERROR => {
@@ -363,17 +369,24 @@ fn verify_signature_by_publish_name(file_path: &Path) -> napi::Result<TrustStatu
     );
   };
 
-  return Ok(trust_status);
+  Ok(trust_status)
 }
 
 fn get_subject(cert_chain_context: CERT_CHAIN_CONTEXT) -> String {
   let mut subject: String = String::new();
+  // let publisher_chain = unsafe {
+  //   cert_chain_context
+  //     .rgpChain
+  //     .as_ref()
+  //     .map(|f| f)
+  //     .and_then(|b| Some(b.rgpElement))
+  // };
   let publisher_chain = unsafe {
     cert_chain_context
       .rgpChain
       .as_ref()
       .and_then(|f| f.as_ref())
-      .and_then(|b| Some(b.rgpElement))
+      .map(|b| b.rgpElement)
   };
 
   if let Some(publisher_chain_data) = publisher_chain {
@@ -381,7 +394,7 @@ fn get_subject(cert_chain_context: CERT_CHAIN_CONTEXT) -> String {
       publisher_chain_data
         .as_ref()
         .and_then(|f| f.as_ref())
-        .and_then(|f| Some(f.pCertContext))
+        .map(|f| f.pCertContext)
     };
     if let Some(publisher_cert_context_data) = publisher_cert_context {
       let publisher_mapping = create_publisher_mapping();
@@ -422,7 +435,7 @@ fn get_subject(cert_chain_context: CERT_CHAIN_CONTEXT) -> String {
         });
     }
   }
-  return subject;
+  subject
 }
 
 #[cfg(test)]

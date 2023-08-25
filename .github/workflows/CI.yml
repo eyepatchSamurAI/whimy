@@ -1,6 +1,9 @@
-name: whimy-tests
+name: whimy-publish
 run-name: ${{ github.run_id }} tests
-on: [push]
+on:
+  push:
+    branches: 
+      - main
 jobs:
   deploy:
     name: Deploy
@@ -22,12 +25,17 @@ jobs:
 
       - name: Lint
         run: cargo clippy
+        
+      - name: Tests
+        run : cargo test
       
-      - name: Compile | Napi
+      - name: Compile
         run: | 
           yarn install
           yarn build
-      - name: Tests
-        run : cargo test
 
 
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
