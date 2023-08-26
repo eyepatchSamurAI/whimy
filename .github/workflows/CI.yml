@@ -34,15 +34,13 @@ jobs:
       - name: Tests
         run : cargo test
       
-      - name: Yarn Install
-        uses: borales/actions-yarn@v4
-        with:
-          cmd: install
+      - name: Npm Install
+        run: npm install
+        shell: powershell
 
-      - name: Compile
-        uses: borales/actions-yarn@v4
-        with:
-          cmd: build
+      - name: Npm Build | Compile
+        run: npm build
+        shell: powershell
 
       - name: Publish
         run: npm publish --provenance --access public
