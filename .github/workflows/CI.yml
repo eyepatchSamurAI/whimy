@@ -20,8 +20,9 @@ jobs:
         run: npm install
 
       - name: Get version from package.json
-        run: echo "VERSION=$(node -p 'require("./package.json").version')" | Out-File -FilePath $env:GITHUB_ENV -Append
+        run: echo "VERSION=$(node -p \"require('./package.json').version\")" | Out-File -FilePath $env:GITHUB_ENV -Append
         shell: powershell
+      
       
       - name: ls
         run: ls
