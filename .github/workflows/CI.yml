@@ -21,25 +21,25 @@ jobs:
 
       - name: Get version from package.json
         id: package-version
-        uses: martinbeentjes/npm-get-version-action@v1.3.1
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
     
       - name: Create and push tag
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git tag ${{ steps.package-version.outputs.current-version}}
+          git tag ${{ env.VERSION }}
           git push --tags
         env:
           GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}
 
       - name: Debug print VERSION
-        run: echo "VERSION=${{ steps.package-version.outputs.current-version}}"        
+        run: echo "VERSION=${{ env.VERSION }}"        
 
       - name: Create GitHub release
         uses: actions/create-release@v1
         with:
-          tag_name: ${{ steps.package-version.outputs.current-version}}
-          release_name: Release ${{ steps.package-version.outputs.current-version}}
+          tag_name: ${{ env.VERSION }}
+          release_name: Release ${{ env.VERSION }}
           draft: false
           prerelease: false
         env:
