@@ -35,14 +35,16 @@ jobs:
       - name: Create GitHub release
         uses: actions/create-release@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ env.VERSION }}
+          release_name: Release ${{ env.VERSION }}
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}
+        
 
   deploy:
+    needs: [create-release]
     name: Deploy
     runs-on: windows-2019
     steps:
