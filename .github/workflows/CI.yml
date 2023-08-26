@@ -9,19 +9,22 @@ jobs:
     name: Deploy
     runs-on: windows-2019
     steps:
-      - name: Setup | Checkout
+      - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Setup | Node
+      - name: Setup Node
         uses: actions/setup-node@v3
         with:
           node-version: '14'
 
-      - name: Setup | Rust
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: rustfmt, clippy
+
+      - name: Format
+        run: cargo fmt
 
       - name: Lint
         run: cargo clippy
@@ -46,3 +49,38 @@ jobs:
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  create-release:
+      runs-on: ubuntu-latest
+      steps:
+
+        - name: Setup Node
+          uses: actions/setup-node@v3
+          with:
+            node-version: '14'
+            
+        - name: Install Dependencies
+          run: npm install
+
+        - name: Get version from package.json
+          run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+      
+        - name: Create and push tag
+          run: |
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+            git tag ${{ env.VERSION }}
+            git push --tags
+          env:
+            GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}
+
+
+        - name: Create GitHub release
+          uses: actions/create-release@v1
+          with:
+            tag_name: ${{ github.ref }}
+            release_name: Release ${{ github.ref }}
+            draft: false
+            prerelease: false
+          env:
+            GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}

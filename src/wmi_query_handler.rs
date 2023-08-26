@@ -133,11 +133,7 @@ impl WMIQueryHandler {
   ) -> napi::Result<&'a SAFEARRAY> {
     let safe_array = unsafe {
       row
-        .GetNames(
-          None,
-          WBEM_CONDITION_FLAG_TYPE(64),
-          variant_ptr,
-        )
+        .GetNames(None, WBEM_CONDITION_FLAG_TYPE(64), variant_ptr)
         .map_err(|_error| {
           napi::Error::from_reason(format!(
             "Failed to retrieve property names for the current row. Original error: {}",

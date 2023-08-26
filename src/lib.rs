@@ -7,10 +7,10 @@ mod wmi_variant;
 #[macro_use]
 extern crate napi_derive;
 
+use crate::verify_signature::verify_signature_by_publisher;
 use napi::Result;
 use verify_signature::TrustStatus;
 use wmi_query_handler::WMIQueryHandler;
-use crate::verify_signature::verify_signature_by_publisher;
 
 #[napi]
 pub struct Wmi {
@@ -58,15 +58,13 @@ impl Wmi {
         let json = serde_json::to_string(&result).unwrap();
         Ok(json)
       }
-      None => {
-        Err(napi::Error::new(
-          napi::Status::GenericFailure,
-          "query parameter is not provided",
-        ))
-      }
+      None => Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "query parameter is not provided",
+      )),
     }
   }
-  
+
   /// Stop the connection between your server and COM
   /// Must be called after you are done making calls to Windows otherwise the COM library will remain locked
   /// This can result is resource leakage or degrade performance.
@@ -78,7 +76,7 @@ impl Wmi {
   /// // Done with making calls to WMI
   /// wmi.stop(); // Very important
   /// ```
-  /// 
+  ///
   #[napi]
   pub fn stop(&self) {
     self.query_handler.stop();
@@ -90,10 +88,13 @@ impl Wmi {
 /// import { verifySignatureByPublisherNames } from "whimy"
 /// const filePath = resolve(directoryName, '../../test_signed_data/signed_exes/microsoft_signed.exe');
 /// const output = verifySignatureByPublisherNames(filePath, ['CN="Microsoft Corporation",O="Microsoft Corporation",L=Redmond,S=Washington,C=US"'])
-/// console.log(output); 
+/// console.log(output);
 /// ```
-/// 
+///
 #[napi]
-pub fn verify_signature_by_publisher_names(file_path: String, publish_names: Vec<String>) -> Result<TrustStatus>{
+pub fn verify_signature_by_publisher_names(
+  file_path: String,
+  publish_names: Vec<String>,
+) -> Result<TrustStatus> {
   verify_signature_by_publisher(file_path, publish_names)
 }
