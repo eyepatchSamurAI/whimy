@@ -17,7 +17,6 @@
     "build/"
   ],
   "napi": {
-    "name": "whimy",
     "triples": {
       "defaults": false,
       "additional": [
@@ -37,7 +36,6 @@
     "artifacts": "napi artifacts",
     "build": "napi build --platform --release build",
     "build:debug": "napi build --platform",
-    "prepublishOnly": "napi prepublish -t npm",
     "universal": "napi universal",
     "version": "napi version"
   },
