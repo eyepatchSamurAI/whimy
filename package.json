@@ -17,7 +17,7 @@
     "build/"
   ],
   "napi": {
-    "name": "wmi",
+    "name": "whimy",
     "triples": {
       "defaults": false,
       "additional": [
@@ -41,5 +41,7 @@
     "universal": "napi universal",
     "version": "napi version"
   },
-  "packageManager": "yarn@3.6.1"
+  "optionalDependencies": {
+    "whimy-win32-x64-msvc": "0.0.1"
+  }
 }
