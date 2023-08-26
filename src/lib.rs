@@ -87,9 +87,9 @@ impl Wmi {
 
 /// Verifies a file given a list of publisher names
 /// ```
-/// import { verifySignatureByPublishNames } from "whimy"
+/// import { verifySignatureByPublisherNames } from "whimy"
 /// const filePath = resolve(directoryName, '../../test_signed_data/signed_exes/microsoft_signed.exe');
-/// const output = verifySignatureByPublishNames(filePath, ['CN="Microsoft Corporation",O="Microsoft Corporation",L=Redmond,S=Washington,C=US"'])
+/// const output = verifySignatureByPublisherNames(filePath, ['CN="Microsoft Corporation",O="Microsoft Corporation",L=Redmond,S=Washington,C=US"'])
 /// console.log(output); 
 /// ```
 /// 
