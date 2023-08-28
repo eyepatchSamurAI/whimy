@@ -22,11 +22,7 @@ jobs:
       - name: Get version from package.json
         run: .\scripts\getVersion.ps1
         shell: powershell
-      
-      - name: ls
-        run: ls
-        shell: powershell
-    
+          
       - name: Create and push tag
         run: |
           git config --local user.email "action@github.com"
@@ -35,9 +31,6 @@ jobs:
           git push --tags
         env:
           GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}
-
-      - name: Debug print VERSION
-        run: echo "VERSION=${{ env.VERSION }}"
 
       - name: Create GitHub release
         uses: actions/create-release@v1
@@ -92,7 +85,7 @@ jobs:
         shell: powershell
 
       - name: Publish
-        run: npm publish --provenance --access public
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

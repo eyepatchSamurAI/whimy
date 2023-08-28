@@ -84,7 +84,7 @@ fn create_publisher_mapping() -> HashMap<String, PCSTR> {
   map
 }
 
-pub fn parse_dn(seq: &str) -> HashMap<String, String> {
+fn parse_dn(seq: &str) -> HashMap<String, String> {
   let mut quoted: bool = false;
   let mut key: Option<String> = None;
   let mut token = String::new();
@@ -209,12 +209,12 @@ fn check_dn_match(subject: &HashMap<String, String>, name: &str) -> napi::Result
 fn validate_signed_file(path: &Path) -> napi::Result<()> {
   let allowed_extensions = allowed_extensions();
 
-  let file_extension: Result<&str, &str> = path
+  let file_extension = path
     .extension()
     .and_then(|s| s.to_str())
-    .ok_or("Failed to get file extension");
+    .ok_or(napi::Error::from_reason("Failed to get file extension"))?;
 
-  if !allowed_extensions.contains(&file_extension.unwrap()) {
+  if !allowed_extensions.contains(&file_extension.to_string()) {
     return Err(napi::Error::from_reason(format!(
       "Accepted file types are: {}",
       allowed_extensions.join(",")
@@ -230,8 +230,16 @@ fn validate_signed_file(path: &Path) -> napi::Result<()> {
   Ok(())
 }
 
-pub fn allowed_extensions() -> &'static [&'static str] {
-  &["exe", "cab", "dll", "ocx", "msi", "msix", "xpi"]
+pub fn allowed_extensions() -> Vec<String> {
+  vec![
+    "exe".to_string(),
+    "cab".to_string(),
+    "dll".to_string(),
+    "ocx".to_string(),
+    "msi".to_string(),
+    "msix".to_string(),
+    "xpi".to_string(),
+  ]
 }
 
 pub fn verify_signature_by_publisher(

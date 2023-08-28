@@ -1,4 +1,4 @@
-use crate::wmi_variant::{process_variant, WMIVariant};
+use crate::wmi::wmi_variant::{process_variant, WMIVariant};
 use std::{boxed::Box, collections::HashMap, ffi::OsStr, os::windows::prelude::OsStrExt};
 use windows::{
   core::{BSTR, PCWSTR},
@@ -127,7 +127,7 @@ impl WMIQueryHandler {
     Ok(row[0].to_owned())
   }
 
-  fn create_safe_array<'a>(
+  fn create_safe_array_from_wbem_object<'a>(
     row: &IWbemClassObject,
     variant_ptr: *mut VARIANT,
   ) -> napi::Result<&'a SAFEARRAY> {
@@ -198,7 +198,8 @@ impl WMIQueryHandler {
     let variant_value = Default::default();
     let variant_ptr: *mut VARIANT = Box::into_raw(Box::new(variant_value));
 
-    let safe_array: &SAFEARRAY = WMIQueryHandler::create_safe_array(row_results, variant_ptr)?;
+    let safe_array: &SAFEARRAY =
+      WMIQueryHandler::create_safe_array_from_wbem_object(row_results, variant_ptr)?;
 
     for i in 0..safe_array.rgsabound[0].cElements as isize {
       let property_name = safe_array_to_string(safe_array, i);

@@ -17,6 +17,7 @@
     "build/"
   ],
   "napi": {
+    "name": "whimy",
     "triples": {
       "defaults": false,
       "additional": [
