@@ -280,7 +280,7 @@ impl WMIQueryHandler {
 fn safe_array_to_string(safe_array: &SAFEARRAY, offset: isize) -> String {
   let safe_array_data_ptr = safe_array.pvData as *const *const u16;
   let property_name: *const u16 = unsafe { *((safe_array_data_ptr).offset(offset)) };
-  let property_name_str = unsafe {
+    let property_name_str = unsafe {
     let len = (0..)
       .take_while(|index| *property_name.offset(*index) != 0)
       .count();
@@ -351,11 +351,51 @@ mod test {
   #[test]
   fn success_change_namespace() {
     let mut wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string()).unwrap();
-    let change_result = wmi_query_handler.change_namespace(r#"root\SecurityCenter"#);
     let result = wmi_query_handler.execute_query("SELECT Model FROM Win32_ComputerSystem".to_string());
     assert!(result.is_ok());
+    let change_result = wmi_query_handler.change_namespace(r#"root\SecurityCenter"#);
     assert!(change_result.is_ok());
     let result = wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
     assert!(result.is_ok());
+  }
+
+  #[test]
+  fn test_safe_array_to_string() {
+    let test_string = "hello";
+    let test_utf16: Vec<u16> = OsStr::new(test_string)
+      .encode_wide()
+      .chain(std::iter::once(0)) // Null-terminated
+      .collect();
+    let test_ptr: *const u16 = test_utf16.as_ptr();
+
+    let bounds: [SAFEARRAYBOUND; 1] = [SAFEARRAYBOUND {
+      cElements: 1,
+      lLbound: 0,
+    }];
+
+    unsafe {
+      let psa = SafeArrayCreate(VT_UI2, 1, bounds.as_ptr() as *mut SAFEARRAYBOUND);
+      println!("1");
+      if !psa.is_null() {
+        let pv_data: *mut *const u16 = (*psa).pvData as *mut *const u16;
+        *pv_data = test_ptr;
+        println!("2");
+        let _ = SafeArrayLock(psa).unwrap();
+        println!("3");
+        println!("{:?}", psa);
+        println!("4");
+        let result = safe_array_to_string(psa.as_ref().unwrap(), 0);
+        assert_eq!(result, "hello");
+        println!("5");
+        let _ = SafeArrayUnlock(psa);
+        let _ = SafeArrayDestroy(psa);
+      }
+    }
+
+    // let variant_value = Default::default();
+    // let variant_ptr: *mut VARIANT = Box::into_raw(Box::new(variant_value));
+
+    // let safe_array: &SAFEARRAY =
+    //   WMIQueryHandler::create_safe_array_from_wbem_object(row_results, variant_ptr)?;
   }
 }
