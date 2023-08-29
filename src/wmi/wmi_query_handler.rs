@@ -4,9 +4,9 @@ use windows::{
   core::{BSTR, PCWSTR},
   Win32::System::{
     Com::{
-      CoCreateInstance, CoInitializeEx, CoInitializeSecurity, CoReleaseServerProcess,
-      CoSetProxyBlanket, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, EOAC_NONE,
-      RPC_C_AUTHN_LEVEL_CALL, RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE, SAFEARRAY,
+      CoCreateInstance, CoInitializeEx, CoInitializeSecurity, CoSetProxyBlanket, CoUninitialize,
+      CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, EOAC_NONE, RPC_C_AUTHN_LEVEL_CALL,
+      RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE, SAFEARRAY,
     },
     Ole::{SafeArrayDestroy, SafeArrayLock},
     Rpc::{RPC_C_AUTHN_NONE, RPC_C_AUTHN_WINNT},
@@ -19,7 +19,7 @@ use windows::{
   },
 };
 
-type QueryResult = HashMap<String, Vec<Option<WMIVariant>>>;
+pub type QueryResult = HashMap<String, Vec<Option<WMIVariant>>>;
 
 #[derive(Debug)]
 pub struct WMIQueryHandler {
@@ -280,7 +280,7 @@ impl WMIQueryHandler {
 fn safe_array_to_string(safe_array: &SAFEARRAY, offset: isize) -> String {
   let safe_array_data_ptr = safe_array.pvData as *const *const u16;
   let property_name: *const u16 = unsafe { *((safe_array_data_ptr).offset(offset)) };
-    let property_name_str = unsafe {
+  let property_name_str = unsafe {
     let len = (0..)
       .take_while(|index| *property_name.offset(*index) != 0)
       .count();
@@ -293,9 +293,9 @@ fn safe_array_to_string(safe_array: &SAFEARRAY, offset: isize) -> String {
 #[cfg(test)]
 mod test {
   use super::*;
-  use std::{ffi::OsStr, os::windows::prelude::OsStrExt, thread, time::Duration};
+  use std::{ffi::OsStr, os::windows::prelude::OsStrExt};
   use windows::Win32::System::{
-    Com::{SAFEARRAY, SAFEARRAYBOUND},
+    Com::SAFEARRAYBOUND,
     Ole::{SafeArrayCreate, SafeArrayUnlock},
     Variant::VT_UI2,
   };
@@ -304,9 +304,9 @@ mod test {
   fn test_new_success() {
     let valid_wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
     assert!(&valid_wmi_query_handler.is_ok());
-    let mut queryHandler = valid_wmi_query_handler.unwrap();
-    queryHandler.stop();
-    assert!(queryHandler.server.is_none());
+    let mut query_handler = valid_wmi_query_handler.unwrap();
+    query_handler.stop();
+    assert!(query_handler.server.is_none());
   }
 
   #[test]
@@ -341,9 +341,11 @@ mod test {
 
   #[test]
   fn failed_execute_query_wrong_namespace_query() {
-    let expected_error_message = "Failed to fetch results for the query. The query may be invalid. Original error: 0x80041010";
+    let expected_error_message =
+      "Failed to fetch results for the query. The query may be invalid. Original error: 0x80041010";
     let mut wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string()).unwrap();
-    let result = wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
+    let result =
+      wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
     assert!(result.is_err_and(|error| error.reason == expected_error_message.to_string()));
     wmi_query_handler.stop();
   }
@@ -351,11 +353,13 @@ mod test {
   #[test]
   fn success_change_namespace() {
     let mut wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string()).unwrap();
-    let result = wmi_query_handler.execute_query("SELECT Model FROM Win32_ComputerSystem".to_string());
+    let result =
+      wmi_query_handler.execute_query("SELECT Model FROM Win32_ComputerSystem".to_string());
     assert!(result.is_ok());
     let change_result = wmi_query_handler.change_namespace(r#"root\SecurityCenter"#);
     assert!(change_result.is_ok());
-    let result = wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
+    let result =
+      wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
     assert!(result.is_ok());
   }
 
@@ -391,11 +395,5 @@ mod test {
         let _ = SafeArrayDestroy(psa);
       }
     }
-
-    // let variant_value = Default::default();
-    // let variant_ptr: *mut VARIANT = Box::into_raw(Box::new(variant_value));
-
-    // let safe_array: &SAFEARRAY =
-    //   WMIQueryHandler::create_safe_array_from_wbem_object(row_results, variant_ptr)?;
   }
 }

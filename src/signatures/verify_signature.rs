@@ -53,7 +53,6 @@ impl Default for TrustStatus {
   }
 }
 
-
 pub fn verify_signature_by_publisher(
   file_path: String,
   publish_names: Vec<String>,
@@ -371,6 +370,13 @@ fn check_dn_match(subject: &HashMap<String, String>, name: &str) -> napi::Result
 fn validate_signed_file(path: &Path) -> napi::Result<()> {
   let allowed_extensions = allowed_extensions();
 
+  if !fs::metadata(path)?.is_file() {
+    return Err(napi::Error::from_reason(format!(
+      "Unable to locate target file {:?}",
+      path
+    )));
+  }
+
   let file_extension = path
     .extension()
     .and_then(|s| s.to_str())
@@ -380,13 +386,6 @@ fn validate_signed_file(path: &Path) -> napi::Result<()> {
     return Err(napi::Error::from_reason(format!(
       "Accepted file types are: {}",
       allowed_extensions.join(",")
-    )));
-  }
-
-  if !fs::metadata(path)?.is_file() {
-    return Err(napi::Error::from_reason(format!(
-      "Unable to locate target file {:?}",
-      path
     )));
   }
   Ok(())
@@ -607,6 +606,18 @@ mod test {
     assert!(&signature_status.is_err());
     assert_eq!(signature_status.unwrap_err().reason, expected_error_string);
   }
+
+  #[test]
+  fn test_not_a_file() {
+    let file_path = SIGNED_PATH;
+    let publisher_names = vec![String::from(r#"CN="Microsoft Corporation""#)];
+    let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
+    let expected_error_string = r#"Unable to locate target file "./test_signed_data/signed_exes""#;
+
+    assert!(&signature_status.is_err());
+    assert_eq!(signature_status.unwrap_err().reason, expected_error_string);
+  }
+
   #[test]
   fn test_custom_signature() {
     println!("If if the custom signature test fails, try running setting_up_cert_testing.ps1"); // Maybe don't keep because this is more about setup than the test. Prob write a dev setup

@@ -1,7 +1,61 @@
-use serde::{Serialize, Serializer};
+use std::ptr;
+use napi::{
+  bindgen_prelude::{check_status, ToNapiValue},
+  sys,
+};
 use windows::Win32::System::Variant::{
   VARIANT, VT_BOOL, VT_BSTR, VT_EMPTY, VT_I2, VT_I4, VT_I8, VT_NULL, VT_R4, VT_R8, VT_UI1, VT_UINT,
 };
+
+// TODO see if there is a faster method. Not any faster than just using serde_json::to_string
+impl ToNapiValue for WMIVariant {
+  unsafe fn to_napi_value(env: sys::napi_env, val: Self) -> napi::Result<sys::napi_value> {
+    let mut raw_value = ptr::null_mut();
+
+    match val {
+      WMIVariant::BStr(s) => {
+        let utf16_data: Vec<u16> = s.encode_utf16().collect();
+        check_status!(unsafe {
+          sys::napi_create_string_utf16(env, utf16_data.as_ptr(), utf16_data.len(), &mut raw_value)
+        })?;
+
+        Ok(raw_value)
+      }
+      WMIVariant::I2(i) => {
+        check_status!(unsafe { sys::napi_create_int32(env, i.into(), &mut raw_value) })?;
+        Ok(raw_value)
+      }
+      WMIVariant::I4(i) => {
+        check_status!(unsafe { sys::napi_create_int32(env, i, &mut raw_value) })?;
+        Ok(raw_value)
+      }
+      WMIVariant::I8(i) => {
+        check_status!(unsafe { sys::napi_create_int64(env, i, &mut raw_value) })?;
+        Ok(raw_value)
+      }
+      WMIVariant::R4(i) => {
+        check_status!(unsafe { sys::napi_create_int32(env, i, &mut raw_value) })?;
+        Ok(raw_value)
+      }
+      WMIVariant::R8(i) => {
+        check_status!(unsafe { sys::napi_create_double(env, i, &mut raw_value) })?;
+        Ok(raw_value)
+      }
+      WMIVariant::Uint(i) => {
+        check_status!(unsafe { sys::napi_create_uint32(env, i, &mut raw_value) })?;
+        Ok(raw_value)
+      }
+      WMIVariant::UI1(i) => {
+        check_status!(unsafe { sys::napi_create_uint32(env, i.into(), &mut raw_value) })?;
+        Ok(raw_value)
+      }
+      WMIVariant::Bool(b) => {
+        check_status!(unsafe { sys::napi_get_boolean(env, b, &mut raw_value) })?;
+        Ok(raw_value)
+      }
+    }
+  }
+}
 
 #[derive(Debug)]
 pub enum WMIVariant {
@@ -62,21 +116,185 @@ pub fn process_variant(value_data: &VARIANT) -> Option<WMIVariant> {
   }
 }
 
-impl Serialize for WMIVariant {
-  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-  where
-    S: Serializer,
-  {
-    match self {
-      WMIVariant::BStr(s) => serializer.serialize_str(s),
-      WMIVariant::I2(i) => serializer.serialize_i16(*i),
-      WMIVariant::I4(i) => serializer.serialize_i32(*i),
-      WMIVariant::I8(i) => serializer.serialize_i64(*i),
-      WMIVariant::R4(i) => serializer.serialize_i32(*i),
-      WMIVariant::R8(f) => serializer.serialize_f64(*f),
-      WMIVariant::Uint(u) => serializer.serialize_u32(*u),
-      WMIVariant::UI1(u) => serializer.serialize_u8(*u),
-      WMIVariant::Bool(b) => serializer.serialize_bool(*b),
-    }
+#[cfg(test)]
+mod test {
+  use super::*;
+  use std::mem::ManuallyDrop;
+  use windows::{
+    core::BSTR,
+    Win32::{
+      Foundation::VARIANT_BOOL,
+      System::Variant::{VARENUM, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0},
+    },
+  };
+
+  #[test]
+  fn test_process_variant_bstr() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_BSTR,
+          Anonymous: VARIANT_0_0_0 {
+            bstrVal: ManuallyDrop::new(BSTR::new()),
+          },
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_some());
+  }
+  #[test]
+  fn test_process_variant_i2() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_I2,
+          Anonymous: VARIANT_0_0_0 { iVal: 32 },
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_some());
+  }
+  #[test]
+  fn test_process_variant_i4() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_I4,
+          Anonymous: VARIANT_0_0_0 { lVal: 32 },
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_some());
+  }
+  #[test]
+  fn test_process_variant_i8() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_I8,
+          Anonymous: VARIANT_0_0_0 { llVal: 32 },
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_some());
+  }
+  #[test]
+  fn test_process_variant_r4() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_R4,
+          Anonymous: VARIANT_0_0_0 { intVal: 32 },
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_some());
+  }
+  #[test]
+  fn test_process_variant_r8() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_R8,
+          Anonymous: VARIANT_0_0_0 { dblVal: 32.0 },
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_some());
+  }
+  #[test]
+  fn test_process_variant_uint() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_UINT,
+          Anonymous: VARIANT_0_0_0 { uintVal: 32 },
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_some());
+  }
+  #[test]
+  fn test_process_variant_ui1() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_UI1,
+          Anonymous: VARIANT_0_0_0 { bVal: 32 },
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_some());
+  }
+  #[test]
+  fn test_process_variant_bool() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_BOOL,
+          Anonymous: VARIANT_0_0_0 {
+            boolVal: VARIANT_BOOL::default(),
+          },
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_some());
+  }
+  #[test]
+  fn test_process_variant_empty() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_EMPTY,
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_none());
+  }
+  #[test]
+  fn test_process_variant_null() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VT_NULL,
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_none());
+  }
+  #[test]
+  fn test_process_variant_other() {
+    let mock_variant = VARIANT {
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt: VARENUM(999),
+          ..Default::default()
+        }),
+      },
+    };
+    let result = process_variant(&mock_variant);
+    assert!(result.is_none());
   }
 }

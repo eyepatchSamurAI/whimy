@@ -2,7 +2,7 @@ mod wmi_query_handler;
 mod wmi_variant;
 
 use napi::Result;
-use wmi_query_handler::WMIQueryHandler;
+use wmi_query_handler::{WMIQueryHandler, QueryResult};
 
 #[napi]
 pub struct Wmi {
@@ -37,23 +37,16 @@ impl Wmi {
   /// ```
   /// import {WMI} from 'wmi'
   /// const wmi = new WMI(`root\\cimv2`);
-  /// const queryString = wmi.query("Select * From Win32_processor");
-  /// const query = JSON.parse(queryString);
+  /// const queryObject = wmi.query("Select * From Win32_processor");
   /// wmi.stop();
   /// ```
   ///
   #[napi]
-  pub fn query(&self, query: Option<String>) -> Result<String> {
+  pub fn query(&self, query: Option<String>) -> Result<QueryResult> {
     match query {
       Some(query_string) => {
         let result = self.query_handler.execute_query(query_string)?;
-        let json = serde_json::to_string(&result).map_err(|error| {
-          napi::Error::from_reason(format!(
-            "Failed to stringify query result, Original Error: {}",
-            error
-          ))
-        })?;
-        Ok(json)
+        Ok(result)
       }
       None => Err(napi::Error::new(
         napi::Status::GenericFailure,
@@ -62,6 +55,17 @@ impl Wmi {
     }
   }
 
+  /// Change the namespace you are querying without having to make a new instance of Wmi
+  ///
+  /// ```
+  /// import {WMI} from 'wmi'
+  /// const wmi = new WMI(`root\\cimv2`);
+  /// const queryObject = wmi.query("Select * From Win32_processor");
+  /// wmi.changeNamespace(`root\\wmi`);
+  /// const newQueryObject = wmi.query("SELECT * FROM MSMouse"); // cimv2 cannot make this query
+  /// wmi.stop();
+  /// ```
+  ///
   #[napi]
   pub fn change_namespace(&mut self, namespace: String) -> napi::Result<()> {
     let _ = &self.query_handler.change_namespace(&namespace)?;
