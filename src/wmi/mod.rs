@@ -62,6 +62,12 @@ impl Wmi {
     }
   }
 
+  #[napi]
+  pub fn change_namespace(&mut self, namespace: String) -> napi::Result<()> {
+    let _ = &self.query_handler.change_namespace(&namespace)?;
+    Ok(())
+  }
+
   /// Stop the connection between your server and COM
   /// Must be called after you are done making calls to Windows otherwise the COM library will remain locked
   /// This can result is resource leakage or degrade performance.
@@ -75,7 +81,7 @@ impl Wmi {
   /// ```
   ///
   #[napi]
-  pub fn stop(&self) {
+  pub fn stop(&mut self) {
     self.query_handler.stop();
   }
 }
