@@ -22,6 +22,192 @@ use windows::Win32::Security::WinTrust::{
   WTD_STATEACTION_VERIFY, WTD_UICONTEXT_EXECUTE, WTD_UI_NONE,
 };
 
+#[napi(object)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrustStatus {
+  pub signed: bool,
+  pub message: String,
+  pub subject: String,
+}
+
+impl TrustStatus {
+  pub fn new() -> Self {
+    TrustStatus {
+      signed: false,
+      message: String::new(),
+      subject: String::new(),
+    }
+  }
+  pub fn from_values(signed: bool, message: &str, subject: &str) -> Self {
+    TrustStatus {
+      signed,
+      message: message.to_string(),
+      subject: subject.to_string(),
+    }
+  }
+}
+
+impl Default for TrustStatus {
+  fn default() -> Self {
+    TrustStatus::new()
+  }
+}
+
+
+pub fn verify_signature_by_publisher(
+  file_path: String,
+  publish_names: Vec<String>,
+) -> napi::Result<TrustStatus> {
+  let trimmed_path = file_path.trim_end();
+  let path: &Path = Path::new(trimmed_path);
+  validate_signed_file(path)?;
+  let result = verify_signature_from_path(path)?;
+  if !result.signed {
+    return Ok(result);
+  }
+  let parsed_subject = parse_dn(&result.subject);
+  if publish_names
+    .iter()
+    .any(|name| check_dn_match(&parsed_subject, name).is_ok_and(|keys_match| keys_match))
+  {
+    return Ok(result.clone());
+  }
+  let final_subject = result.subject;
+
+  Ok(TrustStatus {
+    signed: false,
+    message: format!(
+      "Publisher name does not match.\n\n Given: {} \n\n Expected: {}",
+      final_subject,
+      publish_names.join(","),
+    ),
+    subject: final_subject,
+  })
+}
+
+pub fn verify_signature_from_path(file_path: &Path) -> napi::Result<TrustStatus> {
+  let mut trust_status = TrustStatus::new();
+
+  let constant_wstring_bytes = OsStr::new(&file_path)
+    .encode_wide()
+    .chain(Some(0)) // Add null terminating character
+    .collect::<Vec<u16>>();
+
+  let policy_guid: *mut GUID = &WINTRUST_ACTION_GENERIC_VERIFY_V2 as *const _ as *mut _;
+  let mut win_trust_file_info = WINTRUST_FILE_INFO {
+    cbStruct: std::mem::size_of::<WINTRUST_FILE_INFO>() as u32,
+    pcwszFilePath: PCWSTR::from_raw(constant_wstring_bytes.as_ptr()), // You have to put the ptr in here otherwise  is pointing to invalid memory by the time WinVerifyTrust is called.
+    // The as_ptr() method will give you a pointer to the data, but it won't prevent the data from being dropped when it goes out of scope.
+    hFile: HANDLE::default(),
+    ..Default::default()
+  };
+  let mut win_trust_data = WINTRUST_DATA {
+    cbStruct: std::mem::size_of::<WINTRUST_DATA>() as u32,
+    dwProvFlags: WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT,
+    dwUIChoice: WTD_UI_NONE,
+    fdwRevocationChecks: WTD_REVOKE_WHOLECHAIN,
+    dwUnionChoice: WTD_CHOICE_FILE,
+    dwStateAction: WTD_STATEACTION_VERIFY,
+    dwUIContext: WTD_UICONTEXT_EXECUTE,
+    hWVTStateData: HANDLE::default(),
+    ..Default::default()
+  };
+  win_trust_data.Anonymous.pFile = &mut win_trust_file_info as *mut _;
+  let signature_status = unsafe {
+    WinVerifyTrust(
+      HWND::default(),
+      policy_guid,
+      &mut win_trust_data as *mut _ as *mut std::ffi::c_void,
+    )
+  };
+
+  match HRESULT(signature_status) {
+    x if x.0 == ERROR_SUCCESS.0 as i32 => {
+      trust_status.signed = true;
+      trust_status.message = "Verification succeeded!".to_string();
+    }
+    TRUST_E_NOSIGNATURE | TRUST_E_SUBJECT_FORM_UNKNOWN | TRUST_E_PROVIDER_UNKNOWN => {
+      trust_status.message = "The file is not signed.".to_string();
+      return Ok(trust_status);
+    }
+    TRUST_E_EXPLICIT_DISTRUST => {
+      trust_status.message =
+        "Signature is present but is specifically disallowed by admin or user.".to_string();
+      return Ok(trust_status);
+    }
+    TRUST_E_SUBJECT_NOT_TRUSTED => {
+      trust_status.message = "Signature is present but subject not trusted.".to_string();
+      return Ok(trust_status);
+    }
+    CRYPT_E_SECURITY_SETTINGS => {
+      trust_status.message = "Signature was not explictly trusted by admin, and user trust has been disabled. No signature, publisher, or timestamp error.".to_string();
+      return Ok(trust_status);
+    }
+    CRYPT_E_FILE_ERROR => {
+      trust_status.message = format!("CRYPT_E_FILE_ERROR: Signature was not explictly trusted by admin, and user trust has been disabled. No signature, publisher, or timestamp error. Original Error Code: {signature_status}");
+      return Ok(trust_status);
+    }
+    CERT_E_CHAINING => {
+      trust_status.message = format!("CERT_E_CHAINING: There was an error relating to the certificate chain for the signed file. Check if your certificate is in Root storage. Original Error Code: {signature_status}");
+      return Ok(trust_status);
+    }
+
+    _ => {
+      trust_status.message =
+        format!("Unexpected error. Verification failed. Original Error Code: {signature_status}")
+    }
+  }
+  let crypt_provider_data = unsafe { WTHelperProvDataFromStateData(win_trust_data.hWVTStateData) };
+
+  if crypt_provider_data.is_null() {
+    trust_status.signed = false;
+    trust_status.message = "pProvData is null".to_string();
+    return Ok(trust_status);
+  }
+
+  let crypt_provider_signer =
+    unsafe { WTHelperGetProvSignerFromChain(crypt_provider_data, 0, false, 0) };
+  if crypt_provider_signer.is_null() {
+    trust_status.signed = false;
+    trust_status.message = "sign subject is empty".to_string();
+    return Ok(trust_status);
+  }
+  let sign_subject = unsafe {
+    crypt_provider_signer
+      .as_ref()
+      .and_then(|signer| signer.pChainContext.as_ref())
+      .map(|chain_context| get_certificate_subject(*chain_context))
+  };
+  trust_status.subject = sign_subject
+    .as_ref()
+    .filter(|s| !s.is_empty())
+    .map_or("Sign subject info is empty.".to_string(), |s| s.clone());
+
+  // Any hWVTStateData must be released by a call with close.
+  win_trust_data.dwStateAction = WTD_STATEACTION_CLOSE;
+  unsafe {
+    WinVerifyTrust(
+      HWND::default(),
+      policy_guid,
+      &mut win_trust_data as *mut WINTRUST_DATA as *mut c_void,
+    );
+  };
+
+  Ok(trust_status)
+}
+
+pub fn allowed_extensions() -> Vec<String> {
+  vec![
+    "exe".to_string(),
+    "cab".to_string(),
+    "dll".to_string(),
+    "ocx".to_string(),
+    "msi".to_string(),
+    "msix".to_string(),
+    "xpi".to_string(),
+  ]
+}
+
 /// x500 key refers wincrpyt.h
 ///
 ///  Key         Object Identifier               RDN Value Type(s)
@@ -171,30 +357,6 @@ fn parse_dn(seq: &str) -> HashMap<String, String> {
   result
 }
 
-#[napi(object)]
-#[derive(Debug, Clone, PartialEq)]
-pub struct TrustStatus {
-  pub signed: bool,
-  pub message: String,
-  pub subject: String,
-}
-
-impl TrustStatus {
-  pub fn new() -> Self {
-    TrustStatus {
-      signed: false,
-      message: String::new(),
-      subject: String::new(),
-    }
-  }
-}
-
-impl Default for TrustStatus {
-  fn default() -> Self {
-    TrustStatus::new()
-  }
-}
-
 fn check_dn_match(subject: &HashMap<String, String>, name: &str) -> napi::Result<bool> {
   let distingusihed_names_map = parse_dn(name);
   if !distingusihed_names_map.is_empty() {
@@ -228,160 +390,6 @@ fn validate_signed_file(path: &Path) -> napi::Result<()> {
     )));
   }
   Ok(())
-}
-
-pub fn allowed_extensions() -> Vec<String> {
-  vec![
-    "exe".to_string(),
-    "cab".to_string(),
-    "dll".to_string(),
-    "ocx".to_string(),
-    "msi".to_string(),
-    "msix".to_string(),
-    "xpi".to_string(),
-  ]
-}
-
-pub fn verify_signature_by_publisher(
-  file_path: String,
-  publish_names: Vec<String>,
-) -> napi::Result<TrustStatus> {
-  let trimmed_path = file_path.trim_end();
-  let path: &Path = Path::new(trimmed_path);
-  validate_signed_file(path)?;
-  let result = verify_signature_from_path(path)?;
-  if !result.signed {
-    return Ok(result);
-  }
-  let parsed_subject = parse_dn(&result.subject);
-  if publish_names
-    .iter()
-    .any(|name| check_dn_match(&parsed_subject, name).is_ok_and(|keys_match| keys_match))
-  {
-    return Ok(result.clone());
-  }
-  let final_subject = result.subject;
-
-  Ok(TrustStatus {
-    signed: false,
-    message: format!(
-      "Publisher name does not match.\n\n Given: {} \n\n Expected: {}",
-      final_subject,
-      publish_names.join(","),
-    ),
-    subject: final_subject,
-  })
-}
-
-fn verify_signature_from_path(file_path: &Path) -> napi::Result<TrustStatus> {
-  let mut trust_status = TrustStatus::new();
-
-  let constant_wstring_bytes = OsStr::new(&file_path)
-    .encode_wide()
-    .chain(Some(0)) // Add null terminating character
-    .collect::<Vec<u16>>();
-
-  let policy_guid: *mut GUID = &WINTRUST_ACTION_GENERIC_VERIFY_V2 as *const _ as *mut _;
-  let mut win_trust_file_info = WINTRUST_FILE_INFO {
-    cbStruct: std::mem::size_of::<WINTRUST_FILE_INFO>() as u32,
-    pcwszFilePath: PCWSTR::from_raw(constant_wstring_bytes.as_ptr()), // You have to put the ptr in here otherwise  is pointing to invalid memory by the time WinVerifyTrust is called.
-    // The as_ptr() method will give you a pointer to the data, but it won't prevent the data from being dropped when it goes out of scope.
-    hFile: HANDLE::default(),
-    ..Default::default()
-  };
-  let mut win_trust_data = WINTRUST_DATA {
-    cbStruct: std::mem::size_of::<WINTRUST_DATA>() as u32,
-    dwProvFlags: WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT,
-    dwUIChoice: WTD_UI_NONE,
-    fdwRevocationChecks: WTD_REVOKE_WHOLECHAIN,
-    dwUnionChoice: WTD_CHOICE_FILE,
-    dwStateAction: WTD_STATEACTION_VERIFY,
-    dwUIContext: WTD_UICONTEXT_EXECUTE,
-    hWVTStateData: HANDLE::default(),
-    ..Default::default()
-  };
-  win_trust_data.Anonymous.pFile = &mut win_trust_file_info as *mut _;
-  let signature_status = unsafe {
-    WinVerifyTrust(
-      HWND::default(),
-      policy_guid,
-      &mut win_trust_data as *mut _ as *mut std::ffi::c_void,
-    )
-  };
-
-  match HRESULT(signature_status) {
-    x if x.0 == ERROR_SUCCESS.0 as i32 => {
-      trust_status.signed = true;
-      trust_status.message = "Verification succeeded!".to_string();
-    }
-    TRUST_E_NOSIGNATURE | TRUST_E_SUBJECT_FORM_UNKNOWN | TRUST_E_PROVIDER_UNKNOWN => {
-      trust_status.message = "The file is not signed.".to_string();
-      return Ok(trust_status);
-    }
-    TRUST_E_EXPLICIT_DISTRUST => {
-      trust_status.message =
-        "Signature is present but is specifically disallowed by admin or user.".to_string();
-      return Ok(trust_status);
-    }
-    TRUST_E_SUBJECT_NOT_TRUSTED => {
-      trust_status.message = "Signature is present but subject not trusted.".to_string();
-      return Ok(trust_status);
-    }
-    CRYPT_E_SECURITY_SETTINGS => {
-      trust_status.message = "Signature was not explictly trusted by admin, and user trust has been disabled. No signature, publisher, or timestamp error.".to_string();
-      return Ok(trust_status);
-    }
-    CRYPT_E_FILE_ERROR => {
-      trust_status.message = format!("CRYPT_E_FILE_ERROR: Signature was not explictly trusted by admin, and user trust has been disabled. No signature, publisher, or timestamp error. Original Error Code: {signature_status}");
-      return Ok(trust_status);
-    }
-    CERT_E_CHAINING => {
-      trust_status.message = format!("CERT_E_CHAINING: There was an error relating to the certificate chain for the signed file. Check if your certificate is in Root storage. Original Error Code: {signature_status}");
-      return Ok(trust_status);
-    }
-
-    _ => {
-      trust_status.message =
-        format!("Unexpected error. Verification failed. Original Error Code: {signature_status}")
-    }
-  }
-  let crypt_provider_data = unsafe { WTHelperProvDataFromStateData(win_trust_data.hWVTStateData) };
-
-  if crypt_provider_data.is_null() {
-    trust_status.signed = false;
-    trust_status.message = "pProvData is null".to_string();
-    return Ok(trust_status);
-  }
-
-  let crypt_provider_signer =
-    unsafe { WTHelperGetProvSignerFromChain(crypt_provider_data, 0, false, 0) };
-  if crypt_provider_signer.is_null() {
-    trust_status.signed = false;
-    trust_status.message = "sign subject is empty".to_string();
-    return Ok(trust_status);
-  }
-  let sign_subject = unsafe {
-    crypt_provider_signer
-      .as_ref()
-      .and_then(|signer| signer.pChainContext.as_ref())
-      .map(|chain_context| get_certificate_subject(*chain_context))
-  };
-  trust_status.subject = sign_subject
-    .as_ref()
-    .filter(|s| !s.is_empty())
-    .map_or("Sign subject info is empty.".to_string(), |s| s.clone());
-
-  // Any hWVTStateData must be released by a call with close.
-  win_trust_data.dwStateAction = WTD_STATEACTION_CLOSE;
-  unsafe {
-    WinVerifyTrust(
-      HWND::default(),
-      policy_guid,
-      &mut win_trust_data as *mut WINTRUST_DATA as *mut c_void,
-    );
-  };
-
-  Ok(trust_status)
 }
 
 fn get_certificate_subject(cert_chain_context: CERT_CHAIN_CONTEXT) -> String {
@@ -449,8 +457,28 @@ mod test {
   use super::*;
 
   const SIGNED_PATH: &str = "./test_signed_data/signed_exes";
+  fn assert_string_hashmap_eq(
+    map1: HashMap<String, String>,
+    map2: HashMap<String, String>,
+  ) -> bool {
+    if map1.len() != map2.len() {
+      return false;
+    }
+    for (key, value1) in &map1 {
+      match map2.get(key) {
+        Some(value2) => {
+          if value1 != value2 {
+            return false;
+          }
+        }
+        None => return false,
+      }
+    }
 
-  fn trust_status_eq(trusted_status: &TrustStatus, expected: &TrustStatus) -> bool {
+    true
+  }
+
+  fn assert_trust_status_eq(trusted_status: &TrustStatus, expected: &TrustStatus) -> bool {
     println!("expected {:?}", expected);
     println!("trusted_status {:?}", trusted_status);
     if trusted_status.signed != expected.signed || trusted_status.message != expected.message {
@@ -465,8 +493,7 @@ mod test {
     println!("expected_subject_map {:?}", expected_subject_map);
     println!("trusted_subject_map {:?}", trusted_subject_map);
 
-    assert_eq!(expected_subject_map, trusted_subject_map);
-    true
+    assert_string_hashmap_eq(expected_subject_map, trusted_subject_map)
   }
 
   #[test]
@@ -524,7 +551,10 @@ mod test {
       signed: true,
     };
     assert!(signature_status.is_ok());
-    assert!(trust_status_eq(&signature_status.unwrap(), &expected));
+    assert!(assert_trust_status_eq(
+      &signature_status.unwrap(),
+      &expected
+    ));
   }
 
   #[test]
@@ -541,7 +571,10 @@ mod test {
       signed: true,
     };
     assert!(signature_status.is_ok());
-    assert!(trust_status_eq(&signature_status.unwrap(), &expected));
+    assert!(assert_trust_status_eq(
+      &signature_status.unwrap(),
+      &expected
+    ));
   }
 
   #[test]
@@ -559,7 +592,10 @@ mod test {
       signed: false,
     };
     assert!(signature_status.is_ok());
-    assert!(trust_status_eq(&signature_status.unwrap(), &expected));
+    assert!(assert_trust_status_eq(
+      &signature_status.unwrap(),
+      &expected
+    ));
   }
   #[test]
   fn test_incorrect_extension() {
@@ -573,7 +609,8 @@ mod test {
   }
   #[test]
   fn test_custom_signature() {
-    // If this test is failing try running setting_up_cert_testing.ps1
+    println!("If if the custom signature test fails, try running setting_up_cert_testing.ps1"); // Maybe don't keep because this is more about setup than the test. Prob write a dev setup
+                                                                                                // If this test is failing try running setting_up_cert_testing.ps1
     let file_path = format!("{SIGNED_PATH}/custom_signed_exe.exe");
     let publisher_names = vec![String::from(
       r#"O="TotallyFakeTestDomain, Inc.",C=US,CN=TotallyFakeTestDomain.com"#,
@@ -587,6 +624,9 @@ mod test {
       signed: true,
     };
     assert!(signature_status.is_ok());
-    assert!(trust_status_eq(&signature_status.unwrap(), &expected));
+    assert!(assert_trust_status_eq(
+      &signature_status.unwrap(),
+      &expected
+    ));
   }
 }

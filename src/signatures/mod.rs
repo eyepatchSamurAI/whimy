@@ -1,5 +1,6 @@
 mod verify_signature;
-use self::verify_signature::TrustStatus;
+use std::path::Path;
+use self::verify_signature::{TrustStatus, verify_signature_from_path};
 pub use verify_signature::{allowed_extensions, verify_signature_by_publisher};
 
 #[napi(js_name = "signatures")]
@@ -22,6 +23,19 @@ impl Signatures {
   #[napi]
   pub fn allowed_extensions() -> Vec<String> {
     allowed_extensions()
+  }
+
+  /// Checks if a file is signed, does not validate the signature
+  /// ```
+  /// import { signatures } from "whimy"
+  /// 
+  /// let signature_status = signatures.verify_signature_from_path("./path/to/file.exe");
+  /// let isSigned = signature_status.signed;
+  /// ```
+  /// 
+  #[napi]
+  pub fn verify_signature_from_path(path: String) -> napi::Result<TrustStatus>{
+    verify_signature_from_path(Path::new(&path))
   }
 
   /// Verifies a file given a list of publisher names
