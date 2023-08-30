@@ -55,11 +55,27 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '16'
-      - name: Update npm
-        run: npm install -g npm@latest
+      
+      # Cache Cargo dependencies
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.OS }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.OS }}-cargo-
 
-      - name: see npm version
-        run: npm --version
+      # Cache npm dependencies
+      - name: Cache npm dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/node_modules  # or node_modules, depending on your setup
+          key: ${{ runner.OS }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.OS }}-npm-
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -97,8 +113,11 @@ jobs:
         shell: powershell
 
       - name: Npm Build | Compile
-        run: npm build
+        run: npm run build
         shell: powershell
+    
+      - name: Authenticate with npm
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
       - name: Publish
         run: npm publish --access public
