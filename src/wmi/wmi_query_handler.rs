@@ -350,18 +350,19 @@ mod test {
     wmi_query_handler.stop();
   }
 
-  // #[test]
-  // fn success_change_namespace() {
-  //   let mut wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string()).unwrap();
-  //   let result =
-  //     wmi_query_handler.execute_query("SELECT Model FROM Win32_ComputerSystem".to_string());
-  //   assert!(result.is_ok());
-  //   let change_result = wmi_query_handler.change_namespace(r#"root\SecurityCenter"#);
-  //   assert!(change_result.is_ok());
-  //   let result =
-  //     wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
-  //   assert!(result.is_ok());
-  // }
+  #[test]
+  #[ignore]
+  fn success_change_namespace() {
+    let mut wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string()).unwrap();
+    let result =
+      wmi_query_handler.execute_query("SELECT Model FROM Win32_ComputerSystem".to_string());
+    assert!(result.is_ok());
+    let change_result = wmi_query_handler.change_namespace(r#"root\SecurityCenter"#);
+    assert!(change_result.is_ok());
+    let result =
+      wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
+    assert!(result.is_ok());
+  }
 
   #[test]
   fn test_safe_array_to_string() {

@@ -3,7 +3,7 @@ run-name: ${{ github.run_id }} tests
 on:
   push:
     branches: 
-      - 'release/0.0.2'
+      - main
 jobs:
   create-release:
     runs-on: windows-2019
@@ -23,24 +23,24 @@ jobs:
         run: .\scripts\getVersion.ps1
         shell: powershell
           
-      # - name: Create and push tag
-      #   run: |
-      #     git config --local user.email "action@github.com"
-      #     git config --local user.name "GitHub Action"
-      #     git tag ${{ env.VERSION }}
-      #     git push --tags
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}
+      - name: Create and push tag
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag ${{ env.VERSION }}
+          git push --tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}
 
-      # - name: Create GitHub release
-      #   uses: actions/create-release@v1
-      #   with:
-      #     tag_name: ${{ env.VERSION }}
-      #     release_name: Release ${{ env.VERSION }}
-      #     draft: false
-      #     prerelease: false
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}
+      - name: Create GitHub release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ env.VERSION }}
+          release_name: Release ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}
         
 
   deploy:
@@ -72,12 +72,6 @@ jobs:
         run: .\setting_up_cert_testing.ps1
         shell: powershell
         working-directory: ./test_signed_data/custom_signed
-      
-      # - name: Setup Rust Nightly
-      #   uses: dtolnay/rust-toolchain@stable
-      #   with:
-      #     toolchain: nightly
-      #     components: tarpaulin
 
       - name: Install nightly
         run: rustup toolchain add nightly
@@ -102,7 +96,7 @@ jobs:
         shell: powershell
 
       - name: Publish
-        run: npm publish --access public --dry-run
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
