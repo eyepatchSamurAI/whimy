@@ -1,9 +1,9 @@
-name: whimy-publish
+name: whimy-ci
 run-name: ${{ github.run_id }} tests
 on:
   push:
     branches: 
-      - main
+      - 'release/0.0.2'
 jobs:
   create-release:
     runs-on: windows-2019
@@ -90,7 +90,7 @@ jobs:
         shell: powershell
 
       - name: Publish
-        run: npm publish --access public
+        run: npm publish --access public --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
