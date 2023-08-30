@@ -1,5 +1,7 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)
 [![whimy-ci](https://github.com/eyepatchSamurAI/whimy/actions/workflows/CI.yml/badge.svg)](https://github.com/eyepatchSamurAI/whimy/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/eyepatchSamurAI/whimy/graph/badge.svg?token=WCSPL1LGEF)](https://codecov.io/gh/eyepatchSamurAI/whimy)
+
 # Whimy
 
 In the landscape of Node.js projects that interface with Windows systems, it's common to rely on PowerShell commands for retrieving essential system information. However, this approach poses a security risk and is usually much slower.
