@@ -1,0 +1,79 @@
+name: whimy-ci
+run-name: ${{ github.run_id }} tests
+on:
+  push:
+    branches: 
+      - 'release/*'
+jobs:
+  create-release:
+    runs-on: windows-2019
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '14'
+          
+      - name: Install Dependencies
+        run: npm install
+
+  deploy:
+    needs: [create-release]
+    name: Deploy
+    runs-on: windows-2019
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '14'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Format
+        run: cargo fmt
+
+      - name: Lint
+        run: cargo clippy
+
+      - name: Setup Certificate
+        run: .\setting_up_cert_testing.ps1
+        shell: powershell
+        working-directory: ./test_signed_data/custom_signed
+
+      - name: Install nightly
+        run: rustup toolchain add nightly
+
+      - name: Install Tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Collect test coverage
+        run : cargo tarpaulin --exclude-files "*\\mod.rs" --out Xml -- --test-threads=1 # TODO Fix this to have some in parallel.
+      
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      
+      - name: Npm Install
+        run: npm install
+        shell: powershell
+
+      - name: Npm Build | Compile
+        run: npm build
+        shell: powershell
+
+      - name: Publish
+        run: npm publish --access public --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  
