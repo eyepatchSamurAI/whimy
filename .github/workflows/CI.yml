@@ -60,7 +60,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          components: rustfmt, clippy, tarpaulin
+          components: rustfmt, clippy
 
       - name: Format
         run: cargo fmt
@@ -72,6 +72,12 @@ jobs:
         run: .\setting_up_cert_testing.ps1
         shell: powershell
         working-directory: ./test_signed_data/custom_signed
+      
+      - name: Setup Rust Nightly
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+          components: tarpaulin
       
       - name: Collect test coverage
         run : cargo tarpaulin --exclude-files "*\\mod.rs" --out Xml -- --test-threads=1 # TODO Fix this to have some in parallel.
