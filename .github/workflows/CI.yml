@@ -54,7 +54,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
-          node-version: '14'
+          node-version: '16'
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: see npm version
+        run: npm --version
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
