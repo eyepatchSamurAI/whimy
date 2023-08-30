@@ -73,12 +73,18 @@ jobs:
         shell: powershell
         working-directory: ./test_signed_data/custom_signed
       
-      - name: Setup Rust Nightly
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: nightly
-          components: tarpaulin
-      
+      # - name: Setup Rust Nightly
+      #   uses: dtolnay/rust-toolchain@stable
+      #   with:
+      #     toolchain: nightly
+      #     components: tarpaulin
+
+      - name: Install nightly
+        run: rustup toolchain add nightly --profile minimal
+
+      - name: Install Tarpaulin
+        run: cargo install cargo-tarpaulin
+
       - name: Collect test coverage
         run : cargo tarpaulin --exclude-files "*\\mod.rs" --out Xml -- --test-threads=1 # TODO Fix this to have some in parallel.
       
