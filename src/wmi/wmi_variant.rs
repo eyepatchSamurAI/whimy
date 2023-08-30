@@ -128,136 +128,106 @@ mod test {
     },
   };
 
+
+
+  fn create_variant(vt: VARENUM, value: WMIVariant) -> VARIANT {
+    let inner_value = match value {
+      WMIVariant::BStr(_bstr) => VARIANT_0_0_0 {
+            bstrVal: ManuallyDrop::new(BSTR::new()),
+        },
+        WMIVariant::I2(i) => VARIANT_0_0_0 {
+            iVal: i,
+        },
+        WMIVariant::I4(i) => VARIANT_0_0_0 {
+          lVal: i,
+        },
+        WMIVariant::I8(i) => VARIANT_0_0_0 {
+            llVal: i,
+        },
+        WMIVariant::R4(i) => VARIANT_0_0_0 {
+          intVal: i,
+      },
+        WMIVariant::R8(i) => VARIANT_0_0_0 {
+          dblVal: i,
+      },
+        WMIVariant::Uint(i) => VARIANT_0_0_0 {
+          uintVal: i,
+      },
+        WMIVariant::UI1(i) => VARIANT_0_0_0 {
+          bVal: i,
+      },
+        WMIVariant::Bool(_i) => VARIANT_0_0_0 {
+          boolVal: VARIANT_BOOL::default(),
+      },
+
+    };
+
+    VARIANT {
+        Anonymous: VARIANT_0 {
+            Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+                vt,
+                Anonymous: inner_value,
+                ..Default::default()
+            }),
+        },
+    }
+}
+
   #[test]
   fn test_process_variant_bstr() {
-    let mock_variant = VARIANT {
-      Anonymous: VARIANT_0 {
-        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
-          vt: VT_BSTR,
-          Anonymous: VARIANT_0_0_0 {
-            bstrVal: ManuallyDrop::new(BSTR::new()),
-          },
-          ..Default::default()
-        }),
-      },
-    };
+    let mock_variant = create_variant(VT_BSTR, WMIVariant::BStr("hello".to_string()));
     let result = process_variant(&mock_variant);
     assert!(result.is_some());
   }
   #[test]
   fn test_process_variant_i2() {
-    let mock_variant = VARIANT {
-      Anonymous: VARIANT_0 {
-        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
-          vt: VT_I2,
-          Anonymous: VARIANT_0_0_0 { iVal: 32 },
-          ..Default::default()
-        }),
-      },
-    };
+    let mock_variant = create_variant(VT_I2, WMIVariant::I2(32));
     let result = process_variant(&mock_variant);
     assert!(result.is_some());
   }
   #[test]
   fn test_process_variant_i4() {
-    let mock_variant = VARIANT {
-      Anonymous: VARIANT_0 {
-        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
-          vt: VT_I4,
-          Anonymous: VARIANT_0_0_0 { lVal: 32 },
-          ..Default::default()
-        }),
-      },
-    };
+    let mock_variant = create_variant(VT_I4, WMIVariant::I4(32));
     let result = process_variant(&mock_variant);
     assert!(result.is_some());
   }
   #[test]
   fn test_process_variant_i8() {
-    let mock_variant = VARIANT {
-      Anonymous: VARIANT_0 {
-        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
-          vt: VT_I8,
-          Anonymous: VARIANT_0_0_0 { llVal: 32 },
-          ..Default::default()
-        }),
-      },
-    };
+    let mock_variant = create_variant(VT_I8, WMIVariant::I8(32));
     let result = process_variant(&mock_variant);
     assert!(result.is_some());
   }
   #[test]
   fn test_process_variant_r4() {
-    let mock_variant = VARIANT {
-      Anonymous: VARIANT_0 {
-        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
-          vt: VT_R4,
-          Anonymous: VARIANT_0_0_0 { intVal: 32 },
-          ..Default::default()
-        }),
-      },
-    };
+    let mock_variant = create_variant(VT_R4, WMIVariant::R4(32));
     let result = process_variant(&mock_variant);
     assert!(result.is_some());
   }
   #[test]
   fn test_process_variant_r8() {
-    let mock_variant = VARIANT {
-      Anonymous: VARIANT_0 {
-        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
-          vt: VT_R8,
-          Anonymous: VARIANT_0_0_0 { dblVal: 32.0 },
-          ..Default::default()
-        }),
-      },
-    };
+    let mock_variant = create_variant(VT_R8, WMIVariant::R8(32.0));
     let result = process_variant(&mock_variant);
     assert!(result.is_some());
   }
   #[test]
   fn test_process_variant_uint() {
-    let mock_variant = VARIANT {
-      Anonymous: VARIANT_0 {
-        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
-          vt: VT_UINT,
-          Anonymous: VARIANT_0_0_0 { uintVal: 32 },
-          ..Default::default()
-        }),
-      },
-    };
+    let mock_variant = create_variant(VT_UINT, WMIVariant::Uint(32));
     let result = process_variant(&mock_variant);
     assert!(result.is_some());
   }
   #[test]
   fn test_process_variant_ui1() {
-    let mock_variant = VARIANT {
-      Anonymous: VARIANT_0 {
-        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
-          vt: VT_UI1,
-          Anonymous: VARIANT_0_0_0 { bVal: 32 },
-          ..Default::default()
-        }),
-      },
-    };
+    let mock_variant = create_variant(VT_UI1, WMIVariant::UI1(32));
     let result = process_variant(&mock_variant);
     assert!(result.is_some());
   }
   #[test]
   fn test_process_variant_bool() {
-    let mock_variant = VARIANT {
-      Anonymous: VARIANT_0 {
-        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
-          vt: VT_BOOL,
-          Anonymous: VARIANT_0_0_0 {
-            boolVal: VARIANT_BOOL::default(),
-          },
-          ..Default::default()
-        }),
-      },
-    };
+    let mock_variant = create_variant(VT_BOOL, WMIVariant::Bool(true));
     let result = process_variant(&mock_variant);
     assert!(result.is_some());
   }
+ 
   #[test]
   fn test_process_variant_empty() {
     let mock_variant = VARIANT {

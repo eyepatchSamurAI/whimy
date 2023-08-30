@@ -583,7 +583,6 @@ mod test {
       r#"CN="Microsoft Corporation",L="Redmond",O="Microsoft Corporation",OU="Microsoft Corporation",C="US",S="Washington""#,
     )];
     let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
-    println!("signature_status: {:?}", signature_status);
 
     let expected = TrustStatus {
       message: "The file is not signed.".to_string(),

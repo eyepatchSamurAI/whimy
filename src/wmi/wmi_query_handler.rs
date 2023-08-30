@@ -380,18 +380,12 @@ mod test {
 
     unsafe {
       let psa = SafeArrayCreate(VT_UI2, 1, bounds.as_ptr() as *mut SAFEARRAYBOUND);
-      println!("1");
       if !psa.is_null() {
         let pv_data: *mut *const u16 = (*psa).pvData as *mut *const u16;
         *pv_data = test_ptr;
-        println!("2");
         let _ = SafeArrayLock(psa).unwrap();
-        println!("3");
-        println!("{:?}", psa);
-        println!("4");
         let result = safe_array_to_string(psa.as_ref().unwrap(), 0);
         assert_eq!(result, "hello");
-        println!("5");
         let _ = SafeArrayUnlock(psa);
         let _ = SafeArrayDestroy(psa);
       }
