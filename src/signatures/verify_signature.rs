@@ -22,155 +22,6 @@ use windows::Win32::Security::WinTrust::{
   WTD_STATEACTION_VERIFY, WTD_UICONTEXT_EXECUTE, WTD_UI_NONE,
 };
 
-/// x500 key refers wincrpyt.h
-///
-///  Key         Object Identifier               RDN Value Type(s)
-///  ---         -----------------               -----------------
-///  CN          szOID_COMMON_NAME               Printable, Unicode
-///  L           szOID_LOCALITY_NAME             Printable, Unicode
-///  O           szOID_ORGANIZATION_NAME         Printable, Unicode
-///  OU          szOID_ORGANIZATIONAL_UNIT_NAME  Printable, Unicode
-///  E           szOID_RSA_emailAddr             Only IA5
-///  C           szOID_COUNTRY_NAME              Only Printable
-///  S           szOID_STATE_OR_PROVINCE_NAME    Printable, Unicode
-///  STREET      szOID_STREET_ADDRESS            Printable, Unicode
-///  T           szOID_TITLE                     Printable, Unicode
-///  G           szOID_GIVEN_NAME                Printable, Unicode
-///  I           szOID_INITIALS                  Printable, Unicode
-///  SN          szOID_SUR_NAME                  Printable, Unicode
-///  DC          szOID_DOMAIN_COMPONENT          IA5, UTF8
-///  SERIALNUMBER szOID_DEVICE_SERIAL_NUMBER     Only Printable
-fn create_publisher_mapping() -> HashMap<String, PCSTR> {
-  let publisher_attribute_key = vec![
-    "CN".to_string(),
-    "L".to_string(),
-    "O".to_string(),
-    "OU".to_string(),
-    "E".to_string(),
-    "C".to_string(),
-    "S".to_string(),
-    "STREET".to_string(),
-    "T".to_string(),
-    "G".to_string(),
-    "I".to_string(),
-    "SN".to_string(),
-    "DC".to_string(),
-    "SERIALNUMBER".to_string(),
-  ];
-  // Distinguished Name
-  let dn_attribute_identifiers = [
-    szOID_COMMON_NAME,
-    szOID_LOCALITY_NAME,
-    szOID_ORGANIZATION_NAME,
-    szOID_ORGANIZATIONAL_UNIT_NAME,
-    szOID_RSA_emailAddr,
-    szOID_COUNTRY_NAME,
-    szOID_STATE_OR_PROVINCE_NAME,
-    szOID_STREET_ADDRESS,
-    szOID_TITLE,
-    szOID_GIVEN_NAME,
-    szOID_INITIALS,
-    szOID_SUR_NAME,
-    szOID_DOMAIN_COMPONENT,
-    szOID_DEVICE_SERIAL_NUMBER,
-  ];
-  let mut map = HashMap::new();
-  for (key, value) in publisher_attribute_key
-    .iter()
-    .zip(dn_attribute_identifiers.iter())
-  {
-    let _ = &map.insert(key.to_owned(), value.to_owned());
-  }
-  map
-}
-
-pub fn parse_dn(seq: &str) -> HashMap<String, String> {
-  let mut quoted: bool = false;
-  let mut key: Option<String> = None;
-  let mut token = String::new();
-  let mut next_non_space = 0;
-
-  let seq = seq.trim();
-  let mut result = HashMap::new();
-  let mut chars = seq.chars().peekable();
-
-  while let Some(ch) = chars.next() {
-    if quoted {
-      if ch == '"' {
-        quoted = false;
-        continue;
-      }
-    } else {
-      if ch == '"' {
-        quoted = true;
-        continue;
-      }
-
-      if ch == '\\' {
-        if let Some(first) = chars.next() {
-          let hex_str = format!("{}{}", first, chars.peek().unwrap_or(&' '));
-          if let Ok(ord) = u8::from_str_radix(&hex_str, 16) {
-            chars.next();
-            token.push(char::from(ord));
-            continue;
-          } else {
-            token.push(first);
-          }
-        }
-        continue;
-      }
-
-      if key.is_none() && ch == '=' {
-        key = Some(token.clone());
-        token.clear();
-        continue;
-      }
-
-      if ch == ',' || ch == ';' || ch == '+' {
-        if let Some(k) = key {
-          result.insert(k, token.clone());
-          key = None;
-          token.clear();
-        }
-        continue;
-      }
-    }
-
-    if ch == ' ' && !quoted {
-      if token.is_empty() {
-        continue;
-      }
-
-      if next_non_space > 0 {
-        let mut j = next_non_space;
-        while chars.peek() == Some(&' ') {
-          j += 1;
-          chars.next();
-        }
-        next_non_space = j;
-      }
-
-      let next_char = chars.peek().cloned().unwrap_or_default();
-      if next_char == ','
-        || next_char == ';'
-        || (key.is_none() && next_char == '=')
-        || (key.is_some() && next_char == '+')
-      {
-        next_non_space -= 1;
-        continue;
-      }
-    }
-
-    token.push(ch);
-  }
-
-  if let Some(k) = key {
-    result.insert(k, token);
-  }
-
-  result
-}
-
 #[napi(object)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrustStatus {
@@ -187,51 +38,19 @@ impl TrustStatus {
       subject: String::new(),
     }
   }
+  pub fn from_values(signed: bool, message: &str, subject: &str) -> Self {
+    TrustStatus {
+      signed,
+      message: message.to_string(),
+      subject: subject.to_string(),
+    }
+  }
 }
 
 impl Default for TrustStatus {
   fn default() -> Self {
     TrustStatus::new()
   }
-}
-
-fn check_dn_match(subject: &HashMap<String, String>, name: &str) -> napi::Result<bool> {
-  let distingusihed_names_map = parse_dn(name);
-  if !distingusihed_names_map.is_empty() {
-    Ok(distingusihed_names_map.keys().all(|attribute_type| {
-      distingusihed_names_map.get(attribute_type) == subject.get(attribute_type)
-    }))
-  } else {
-    Ok(Some(name) == subject.get("CN").map(|x| x.as_str()))
-  }
-}
-
-fn validate_signed_file(path: &Path) -> napi::Result<()> {
-  let allowed_extensions = allowed_extensions();
-
-  let file_extension: Result<&str, &str> = path
-    .extension()
-    .and_then(|s| s.to_str())
-    .ok_or("Failed to get file extension");
-
-  if !allowed_extensions.contains(&file_extension.unwrap()) {
-    return Err(napi::Error::from_reason(format!(
-      "Accepted file types are: {}",
-      allowed_extensions.join(",")
-    )));
-  }
-
-  if !fs::metadata(path)?.is_file() {
-    return Err(napi::Error::from_reason(format!(
-      "Unable to locate target file {:?}",
-      path
-    )));
-  }
-  Ok(())
-}
-
-pub fn allowed_extensions() -> &'static [&'static str] {
-  &["exe", "cab", "dll", "ocx", "msi", "msix", "xpi"]
 }
 
 pub fn verify_signature_by_publisher(
@@ -265,7 +84,7 @@ pub fn verify_signature_by_publisher(
   })
 }
 
-fn verify_signature_from_path(file_path: &Path) -> napi::Result<TrustStatus> {
+pub fn verify_signature_from_path(file_path: &Path) -> napi::Result<TrustStatus> {
   let mut trust_status = TrustStatus::new();
 
   let constant_wstring_bytes = OsStr::new(&file_path)
@@ -376,6 +195,202 @@ fn verify_signature_from_path(file_path: &Path) -> napi::Result<TrustStatus> {
   Ok(trust_status)
 }
 
+pub fn allowed_extensions() -> Vec<String> {
+  vec![
+    "exe".to_string(),
+    "cab".to_string(),
+    "dll".to_string(),
+    "ocx".to_string(),
+    "msi".to_string(),
+    "msix".to_string(),
+    "xpi".to_string(),
+  ]
+}
+
+/// x500 key refers wincrpyt.h
+///
+///  Key         Object Identifier               RDN Value Type(s)
+///  ---         -----------------               -----------------
+///  CN          szOID_COMMON_NAME               Printable, Unicode
+///  L           szOID_LOCALITY_NAME             Printable, Unicode
+///  O           szOID_ORGANIZATION_NAME         Printable, Unicode
+///  OU          szOID_ORGANIZATIONAL_UNIT_NAME  Printable, Unicode
+///  E           szOID_RSA_emailAddr             Only IA5
+///  C           szOID_COUNTRY_NAME              Only Printable
+///  S           szOID_STATE_OR_PROVINCE_NAME    Printable, Unicode
+///  STREET      szOID_STREET_ADDRESS            Printable, Unicode
+///  T           szOID_TITLE                     Printable, Unicode
+///  G           szOID_GIVEN_NAME                Printable, Unicode
+///  I           szOID_INITIALS                  Printable, Unicode
+///  SN          szOID_SUR_NAME                  Printable, Unicode
+///  DC          szOID_DOMAIN_COMPONENT          IA5, UTF8
+///  SERIALNUMBER szOID_DEVICE_SERIAL_NUMBER     Only Printable
+fn create_publisher_mapping() -> HashMap<String, PCSTR> {
+  let publisher_attribute_key = vec![
+    "CN".to_string(),
+    "L".to_string(),
+    "O".to_string(),
+    "OU".to_string(),
+    "E".to_string(),
+    "C".to_string(),
+    "S".to_string(),
+    "STREET".to_string(),
+    "T".to_string(),
+    "G".to_string(),
+    "I".to_string(),
+    "SN".to_string(),
+    "DC".to_string(),
+    "SERIALNUMBER".to_string(),
+  ];
+  // Distinguished Name
+  let dn_attribute_identifiers = [
+    szOID_COMMON_NAME,
+    szOID_LOCALITY_NAME,
+    szOID_ORGANIZATION_NAME,
+    szOID_ORGANIZATIONAL_UNIT_NAME,
+    szOID_RSA_emailAddr,
+    szOID_COUNTRY_NAME,
+    szOID_STATE_OR_PROVINCE_NAME,
+    szOID_STREET_ADDRESS,
+    szOID_TITLE,
+    szOID_GIVEN_NAME,
+    szOID_INITIALS,
+    szOID_SUR_NAME,
+    szOID_DOMAIN_COMPONENT,
+    szOID_DEVICE_SERIAL_NUMBER,
+  ];
+  let mut map = HashMap::new();
+  for (key, value) in publisher_attribute_key
+    .iter()
+    .zip(dn_attribute_identifiers.iter())
+  {
+    let _ = &map.insert(key.to_owned(), value.to_owned());
+  }
+  map
+}
+
+fn parse_dn(seq: &str) -> HashMap<String, String> {
+  let mut quoted: bool = false;
+  let mut key: Option<String> = None;
+  let mut token = String::new();
+  let mut next_non_space = 0;
+
+  let seq = seq.trim();
+  let mut result = HashMap::new();
+  let mut chars = seq.chars().peekable();
+
+  while let Some(ch) = chars.next() {
+    if quoted {
+      if ch == '"' {
+        quoted = false;
+        continue;
+      }
+    } else {
+      if ch == '"' {
+        quoted = true;
+        continue;
+      }
+
+      if ch == '\\' {
+        if let Some(first) = chars.next() {
+          let hex_str = format!("{}{}", first, chars.peek().unwrap_or(&' '));
+          if let Ok(ord) = u8::from_str_radix(&hex_str, 16) {
+            chars.next();
+            token.push(char::from(ord));
+            continue;
+          } else {
+            token.push(first);
+          }
+        }
+        continue;
+      }
+
+      if key.is_none() && ch == '=' {
+        key = Some(token.clone());
+        token.clear();
+        continue;
+      }
+
+      if ch == ',' || ch == ';' || ch == '+' {
+        if let Some(k) = key {
+          result.insert(k, token.clone());
+          key = None;
+          token.clear();
+        }
+        continue;
+      }
+    }
+
+    if ch == ' ' && !quoted {
+      if token.is_empty() {
+        continue;
+      }
+
+      if next_non_space > 0 {
+        let mut j = next_non_space;
+        while chars.peek() == Some(&' ') {
+          j += 1;
+          chars.next();
+        }
+        next_non_space = j;
+      }
+
+      let next_char = chars.peek().cloned().unwrap_or_default();
+      if next_char == ','
+        || next_char == ';'
+        || (key.is_none() && next_char == '=')
+        || (key.is_some() && next_char == '+')
+      {
+        next_non_space -= 1;
+        continue;
+      }
+    }
+
+    token.push(ch);
+  }
+
+  if let Some(k) = key {
+    result.insert(k, token);
+  }
+
+  result
+}
+
+fn check_dn_match(subject: &HashMap<String, String>, name: &str) -> napi::Result<bool> {
+  let distingusihed_names_map = parse_dn(name);
+  if !distingusihed_names_map.is_empty() {
+    Ok(distingusihed_names_map.keys().all(|attribute_type| {
+      distingusihed_names_map.get(attribute_type) == subject.get(attribute_type)
+    }))
+  } else {
+    Ok(Some(name) == subject.get("CN").map(|x| x.as_str()))
+  }
+}
+
+fn validate_signed_file(path: &Path) -> napi::Result<()> {
+  let allowed_extensions = allowed_extensions();
+
+  if !fs::metadata(path)?.is_file() {
+    return Err(napi::Error::from_reason(format!(
+      "Unable to locate target file {:?}",
+      path
+    )));
+  }
+
+  let file_extension = path
+    .extension()
+    .and_then(|s| s.to_str())
+    .ok_or(napi::Error::from_reason("Failed to get file extension"))?;
+
+  if !allowed_extensions.contains(&file_extension.to_string()) {
+    return Err(napi::Error::from_reason(format!(
+      "Accepted file types are: {}",
+      allowed_extensions.join(",")
+    )));
+  }
+  Ok(())
+}
+
 fn get_certificate_subject(cert_chain_context: CERT_CHAIN_CONTEXT) -> String {
   let mut subject: String = String::new();
 
@@ -441,8 +456,28 @@ mod test {
   use super::*;
 
   const SIGNED_PATH: &str = "./test_signed_data/signed_exes";
+  fn assert_string_hashmap_eq(
+    map1: HashMap<String, String>,
+    map2: HashMap<String, String>,
+  ) -> bool {
+    if map1.len() != map2.len() {
+      return false;
+    }
+    for (key, value1) in &map1 {
+      match map2.get(key) {
+        Some(value2) => {
+          if value1 != value2 {
+            return false;
+          }
+        }
+        None => return false,
+      }
+    }
 
-  fn trust_status_eq(trusted_status: &TrustStatus, expected: &TrustStatus) -> bool {
+    true
+  }
+
+  fn assert_trust_status_eq(trusted_status: &TrustStatus, expected: &TrustStatus) -> bool {
     println!("expected {:?}", expected);
     println!("trusted_status {:?}", trusted_status);
     if trusted_status.signed != expected.signed || trusted_status.message != expected.message {
@@ -457,8 +492,7 @@ mod test {
     println!("expected_subject_map {:?}", expected_subject_map);
     println!("trusted_subject_map {:?}", trusted_subject_map);
 
-    assert_eq!(expected_subject_map, trusted_subject_map);
-    true
+    assert_string_hashmap_eq(expected_subject_map, trusted_subject_map)
   }
 
   #[test]
@@ -516,7 +550,10 @@ mod test {
       signed: true,
     };
     assert!(signature_status.is_ok());
-    assert!(trust_status_eq(&signature_status.unwrap(), &expected));
+    assert!(assert_trust_status_eq(
+      &signature_status.unwrap(),
+      &expected
+    ));
   }
 
   #[test]
@@ -533,7 +570,10 @@ mod test {
       signed: true,
     };
     assert!(signature_status.is_ok());
-    assert!(trust_status_eq(&signature_status.unwrap(), &expected));
+    assert!(assert_trust_status_eq(
+      &signature_status.unwrap(),
+      &expected
+    ));
   }
 
   #[test]
@@ -551,7 +591,10 @@ mod test {
       signed: false,
     };
     assert!(signature_status.is_ok());
-    assert!(trust_status_eq(&signature_status.unwrap(), &expected));
+    assert!(assert_trust_status_eq(
+      &signature_status.unwrap(),
+      &expected
+    ));
   }
   #[test]
   fn test_incorrect_extension() {
@@ -563,9 +606,22 @@ mod test {
     assert!(&signature_status.is_err());
     assert_eq!(signature_status.unwrap_err().reason, expected_error_string);
   }
+
+  #[test]
+  fn test_not_a_file() {
+    let file_path = SIGNED_PATH;
+    let publisher_names = vec![String::from(r#"CN="Microsoft Corporation""#)];
+    let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
+    let expected_error_string = r#"Unable to locate target file "./test_signed_data/signed_exes""#;
+
+    assert!(&signature_status.is_err());
+    assert_eq!(signature_status.unwrap_err().reason, expected_error_string);
+  }
+
   #[test]
   fn test_custom_signature() {
-    // If this test is failing try running setting_up_cert_testing.ps1
+    println!("If if the custom signature test fails, try running setting_up_cert_testing.ps1"); // Maybe don't keep because this is more about setup than the test. Prob write a dev setup
+                                                                                                // If this test is failing try running setting_up_cert_testing.ps1
     let file_path = format!("{SIGNED_PATH}/custom_signed_exe.exe");
     let publisher_names = vec![String::from(
       r#"O="TotallyFakeTestDomain, Inc.",C=US,CN=TotallyFakeTestDomain.com"#,
@@ -579,6 +635,9 @@ mod test {
       signed: true,
     };
     assert!(signature_status.is_ok());
-    assert!(trust_status_eq(&signature_status.unwrap(), &expected));
+    assert!(assert_trust_status_eq(
+      &signature_status.unwrap(),
+      &expected
+    ));
   }
 }

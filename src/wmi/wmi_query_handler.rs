@@ -1,4 +1,4 @@
-use crate::wmi_variant::{process_variant, WMIVariant};
+use crate::wmi::wmi_variant::{process_variant, WMIVariant};
 use std::{boxed::Box, collections::HashMap, ffi::OsStr, os::windows::prelude::OsStrExt};
 use windows::{
   core::{BSTR, PCWSTR},
@@ -18,60 +18,24 @@ use windows::{
     },
   },
 };
-type QueryResult = HashMap<String, Vec<Option<WMIVariant>>>;
 
+pub type QueryResult = HashMap<String, Vec<Option<WMIVariant>>>;
+
+#[derive(Debug)]
 pub struct WMIQueryHandler {
-  server: IWbemServices,
+  server: Option<IWbemServices>, // Allows us to deref by setting to None
 }
 
 impl WMIQueryHandler {
-  pub fn stop(&self) {
-    unsafe {
-      CoUninitialize();
-    }
-  }
   pub fn new(service_type: String) -> napi::Result<Self> {
     unsafe {
       CoInitializeEx(None, COINIT_MULTITHREADED)
         .map_err(|_error| napi::Error::from_reason("Failed to Initialize COM"))?;
     };
 
-    unsafe {
-      CoInitializeSecurity(
-        None,
-        -1,
-        None,
-        None,
-        RPC_C_AUTHN_LEVEL_DEFAULT,
-        RPC_C_IMP_LEVEL_IMPERSONATE,
-        None,
-        EOAC_NONE,
-        None,
-      )
-    }
-    .map_err(|_error| napi::Error::from_reason("Failed to initialize security"))?;
+    WMIQueryHandler::initialize_security()?;
 
-    let locator: IWbemLocator =
-      unsafe { CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER) }
-        .map_err(|_e| napi::Error::new(napi::Status::GenericFailure, "Failed CoCreateInstance"))?;
-
-    let server: IWbemServices = unsafe {
-      locator.ConnectServer(
-        &BSTR::from(service_type.clone()),
-        None,
-        None,
-        None,
-        0,
-        None,
-        None,
-      )
-    }
-    .map_err(|_e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to connect to {} server", service_type.clone()),
-      )
-    })?;
+    let server = WMIQueryHandler::connect_to_wmi_namespace(&service_type)?;
 
     unsafe {
       let _ = CoSetProxyBlanket(
@@ -86,13 +50,97 @@ impl WMIQueryHandler {
       );
     };
 
-    Ok(WMIQueryHandler { server })
+    Ok(WMIQueryHandler {
+      server: Some(server),
+    })
+  }
+
+  pub fn stop(&mut self) {
+    self.server = None;
+    unsafe {
+      CoUninitialize();
+    };
+  }
+
+  pub fn execute_query(&self, query: String) -> napi::Result<QueryResult> {
+    let mut results: QueryResult = HashMap::new();
+    let query_execution = self.execute_wmi_query(&query)?;
+
+    while let Some(row_results) = WMIQueryHandler::get_row_results(&query_execution)? {
+      WMIQueryHandler::extract_variant_data_and_update_results(&mut results, &row_results)?;
+    }
+    Ok(results)
+  }
+
+  pub fn change_namespace(&mut self, namespace: &str) -> napi::Result<()> {
+    let new_server = WMIQueryHandler::connect_to_wmi_namespace(namespace)?;
+    unsafe {
+      let _ = CoSetProxyBlanket(
+        &new_server,
+        RPC_C_AUTHN_WINNT,
+        RPC_C_AUTHN_NONE,
+        None,
+        RPC_C_AUTHN_LEVEL_CALL,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        None,
+        EOAC_NONE,
+      );
+    };
+    self.server = Some(new_server);
+    Ok(())
+  }
+
+  pub fn initialize_security() -> napi::Result<()> {
+    unsafe {
+      CoInitializeSecurity(
+        None,
+        -1,
+        None,
+        None,
+        RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        None,
+        EOAC_NONE,
+        None,
+      )
+    }
+    .map_err(|_error| napi::Error::from_reason("Failed to initialize security"))?;
+    Ok(())
+  }
+
+  fn connect_to_wmi_namespace(namespace: &str) -> napi::Result<IWbemServices> {
+    let locator: IWbemLocator =
+      unsafe { CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER) }
+        .map_err(|_e| napi::Error::new(napi::Status::GenericFailure, "Failed CoCreateInstance"))?;
+
+    let server: IWbemServices = unsafe {
+      locator.ConnectServer(
+        &BSTR::from(namespace.clone()),
+        None,
+        None,
+        None,
+        0,
+        None,
+        None,
+      )
+    }
+    .map_err(|_e| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("Failed to connect to {} server", namespace.clone()),
+      )
+    })?;
+    Ok(server)
   }
 
   fn execute_wmi_query(&self, query: &str) -> napi::Result<IEnumWbemClassObject> {
+    let server = self
+      .server
+      .as_ref()
+      .ok_or(napi::Error::from_reason("Server is None"))?;
+
     unsafe {
-      self
-        .server
+      server
         .ExecQuery(
           &BSTR::from("WQL"),
           &BSTR::from(query),
@@ -127,7 +175,7 @@ impl WMIQueryHandler {
     Ok(row[0].to_owned())
   }
 
-  fn create_safe_array<'a>(
+  fn create_safe_array_from_wbem_object<'a>(
     row: &IWbemClassObject,
     variant_ptr: *mut VARIANT,
   ) -> napi::Result<&'a SAFEARRAY> {
@@ -198,7 +246,8 @@ impl WMIQueryHandler {
     let variant_value = Default::default();
     let variant_ptr: *mut VARIANT = Box::into_raw(Box::new(variant_value));
 
-    let safe_array: &SAFEARRAY = WMIQueryHandler::create_safe_array(row_results, variant_ptr)?;
+    let safe_array: &SAFEARRAY =
+      WMIQueryHandler::create_safe_array_from_wbem_object(row_results, variant_ptr)?;
 
     for i in 0..safe_array.rgsabound[0].cElements as isize {
       let property_name = safe_array_to_string(safe_array, i);
@@ -226,16 +275,6 @@ impl WMIQueryHandler {
     }
     Ok(())
   }
-
-  pub fn execute_query(&self, query: String) -> napi::Result<QueryResult> {
-    let mut results: QueryResult = HashMap::new();
-    let query_execution = self.execute_wmi_query(&query)?;
-
-    while let Some(row_results) = WMIQueryHandler::get_row_results(&query_execution)? {
-      WMIQueryHandler::extract_variant_data_and_update_results(&mut results, &row_results)?;
-    }
-    Ok(results)
-  }
 }
 
 fn safe_array_to_string(safe_array: &SAFEARRAY, offset: isize) -> String {
@@ -249,4 +288,113 @@ fn safe_array_to_string(safe_array: &SAFEARRAY, offset: isize) -> String {
     String::from_utf16_lossy(slice)
   };
   property_name_str
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use std::{ffi::OsStr, os::windows::prelude::OsStrExt};
+  use windows::Win32::System::{
+    Com::SAFEARRAYBOUND,
+    Ole::{SafeArrayCreate, SafeArrayUnlock},
+    Variant::VT_UI2,
+  };
+
+  #[test]
+  fn test_new_success() {
+    let valid_wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    assert!(&valid_wmi_query_handler.is_ok());
+    let mut query_handler = valid_wmi_query_handler.unwrap();
+    query_handler.stop();
+    assert!(query_handler.server.is_none());
+  }
+
+  #[test]
+  fn failed_new_initialize_security() {
+    let failed_initialize_security = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    assert!(failed_initialize_security.is_ok());
+    let mut failed_initialize_query_handler = failed_initialize_security.unwrap();
+
+    let too_many_inits = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    assert!(too_many_inits.is_err());
+    assert!(&too_many_inits.is_err_and(|error| error.reason == "Failed to initialize security"));
+    failed_initialize_query_handler.stop();
+  }
+
+  #[test]
+  fn failed_new_bad_namespace() {
+    let bad_namespace = WMIQueryHandler::new(r#"bad\name"#.to_string());
+    assert!(
+      &bad_namespace.is_err_and(|error| error.reason == "Failed to connect to bad\\name server")
+    );
+  }
+
+  #[test]
+  fn success_execute_query() {
+    let mut wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string()).unwrap();
+    let result = wmi_query_handler
+      .execute_query(r#"SELECT Name, State FROM Win32_Service WHERE Name='Winmgmt'"#.to_string());
+    assert!(&result.is_ok());
+    // TODO Check key/value
+    wmi_query_handler.stop();
+  }
+
+  #[test]
+  fn failed_execute_query_wrong_namespace_query() {
+    let expected_error_message =
+      "Failed to fetch results for the query. The query may be invalid. Original error: 0x80041010";
+    let mut wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string()).unwrap();
+    let result =
+      wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
+    assert!(result.is_err_and(|error| error.reason == expected_error_message.to_string()));
+    wmi_query_handler.stop();
+  }
+
+  #[test]
+  #[ignore]
+  fn success_change_namespace() {
+    let mut wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string()).unwrap();
+    let result =
+      wmi_query_handler.execute_query("SELECT Model FROM Win32_ComputerSystem".to_string());
+    assert!(result.is_ok());
+    let change_result = wmi_query_handler.change_namespace(r#"root\SecurityCenter"#);
+    assert!(change_result.is_ok());
+    let result =
+      wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
+    assert!(result.is_ok());
+  }
+
+  #[test]
+  fn test_safe_array_to_string() {
+    let test_string = "hello";
+    let test_utf16: Vec<u16> = OsStr::new(test_string)
+      .encode_wide()
+      .chain(std::iter::once(0)) // Null-terminated
+      .collect();
+    let test_ptr: *const u16 = test_utf16.as_ptr();
+
+    let bounds: [SAFEARRAYBOUND; 1] = [SAFEARRAYBOUND {
+      cElements: 1,
+      lLbound: 0,
+    }];
+
+    unsafe {
+      let psa = SafeArrayCreate(VT_UI2, 1, bounds.as_ptr() as *mut SAFEARRAYBOUND);
+      println!("1");
+      if !psa.is_null() {
+        let pv_data: *mut *const u16 = (*psa).pvData as *mut *const u16;
+        *pv_data = test_ptr;
+        println!("2");
+        let _ = SafeArrayLock(psa).unwrap();
+        println!("3");
+        println!("{:?}", psa);
+        println!("4");
+        let result = safe_array_to_string(psa.as_ref().unwrap(), 0);
+        assert_eq!(result, "hello");
+        println!("5");
+        let _ = SafeArrayUnlock(psa);
+        let _ = SafeArrayDestroy(psa);
+      }
+    }
+  }
 }
