@@ -80,7 +80,7 @@ jobs:
       #     components: tarpaulin
 
       - name: Install nightly
-        run: rustup toolchain add nightly --profile minimal
+        run: rustup toolchain add nightly
 
       - name: Install Tarpaulin
         run: cargo install cargo-tarpaulin
