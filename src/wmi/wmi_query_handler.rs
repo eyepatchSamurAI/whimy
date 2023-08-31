@@ -27,7 +27,7 @@ pub struct WMIQueryHandler {
 }
 
 impl WMIQueryHandler {
-  pub fn new(service_type: String) -> napi::Result<Self> {
+  pub fn new(namespace: String) -> napi::Result<Self> {
     unsafe {
       CoInitializeEx(None, COINIT_MULTITHREADED)
         .map_err(|_error| napi::Error::from_reason("Failed to Initialize COM"))?;
@@ -35,7 +35,7 @@ impl WMIQueryHandler {
 
     WMIQueryHandler::initialize_security()?;
 
-    let server = WMIQueryHandler::connect_to_wmi_namespace(&service_type)?;
+    let server = WMIQueryHandler::connect_to_wmi_namespace(&namespace)?;
 
     unsafe {
       let _ = CoSetProxyBlanket(
@@ -113,23 +113,14 @@ impl WMIQueryHandler {
       unsafe { CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER) }
         .map_err(|_e| napi::Error::new(napi::Status::GenericFailure, "Failed CoCreateInstance"))?;
 
-    let server: IWbemServices = unsafe {
-      locator.ConnectServer(
-        &BSTR::from(namespace.clone()),
-        None,
-        None,
-        None,
-        0,
-        None,
-        None,
-      )
-    }
-    .map_err(|_e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to connect to {} server", namespace.clone()),
-      )
-    })?;
+    let server: IWbemServices =
+      unsafe { locator.ConnectServer(&BSTR::from(namespace), None, None, None, 0, None, None) }
+        .map_err(|_e| {
+          napi::Error::new(
+            napi::Status::GenericFailure,
+            format!("Failed to connect to {} server", namespace),
+          )
+        })?;
     Ok(server)
   }
 
@@ -243,7 +234,7 @@ impl WMIQueryHandler {
     query_result_map: &mut QueryResult,
     row_results: &IWbemClassObject,
   ) -> napi::Result<()> {
-    let variant_value = Default::default();
+    let variant_value: VARIANT = Default::default();
     let variant_ptr: *mut VARIANT = Box::into_raw(Box::new(variant_value));
 
     let safe_array: &SAFEARRAY =
@@ -260,6 +251,8 @@ impl WMIQueryHandler {
     }
 
     // Clean up Variant, safe array, and pointer
+    // If a VARIANT was created uninitialized don't call VariantClear. The .vt field would be empty and thus have garbage data.
+    // In this case it's not an issue because Default zero's all fields thus making vt VT_EMPTY
     unsafe {
       VariantClear(variant_ptr).map_err(|_error| {
         napi::Error::from_reason(format!(
@@ -335,7 +328,6 @@ mod test {
     let result = wmi_query_handler
       .execute_query(r#"SELECT Name, State FROM Win32_Service WHERE Name='Winmgmt'"#.to_string());
     assert!(&result.is_ok());
-    // TODO Check key/value
     wmi_query_handler.stop();
   }
 
@@ -351,16 +343,14 @@ mod test {
   }
 
   #[test]
-  #[ignore]
   fn success_change_namespace() {
     let mut wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string()).unwrap();
     let result =
       wmi_query_handler.execute_query("SELECT Model FROM Win32_ComputerSystem".to_string());
     assert!(result.is_ok());
-    let change_result = wmi_query_handler.change_namespace(r#"root\SecurityCenter"#);
+    let change_result = wmi_query_handler.change_namespace(r#"root\wmi"#);
     assert!(change_result.is_ok());
-    let result =
-      wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
+    let result = wmi_query_handler.execute_query("SELECT * FROM MS_SystemInformation".to_string());
     assert!(result.is_ok());
   }
 
@@ -369,7 +359,7 @@ mod test {
     let test_string = "hello";
     let test_utf16: Vec<u16> = OsStr::new(test_string)
       .encode_wide()
-      .chain(std::iter::once(0)) // Null-terminated
+      .chain(std::iter::once(0))
       .collect();
     let test_ptr: *const u16 = test_utf16.as_ptr();
 

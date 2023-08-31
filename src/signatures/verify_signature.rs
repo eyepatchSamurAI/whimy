@@ -58,9 +58,8 @@ pub fn verify_signature_by_publisher(
   publish_names: Vec<String>,
 ) -> napi::Result<TrustStatus> {
   let trimmed_path = file_path.trim_end();
-  let path: &Path = Path::new(trimmed_path);
-  validate_signed_file(path)?;
-  let result = verify_signature_from_path(path)?;
+  validate_signed_file(trimmed_path)?;
+  let result = verify_signature_from_path(trimmed_path)?;
   if !result.signed {
     return Ok(result);
   }
@@ -84,10 +83,10 @@ pub fn verify_signature_by_publisher(
   })
 }
 
-pub fn verify_signature_from_path(file_path: &Path) -> napi::Result<TrustStatus> {
+pub fn verify_signature_from_path(file_path: &str) -> napi::Result<TrustStatus> {
   let mut trust_status = TrustStatus::new();
 
-  let constant_wstring_bytes = OsStr::new(&file_path)
+  let constant_wstring_bytes = OsStr::new(Path::new(&file_path))
     .encode_wide()
     .chain(Some(0)) // Add null terminating character
     .collect::<Vec<u16>>();
@@ -367,7 +366,8 @@ fn check_dn_match(subject: &HashMap<String, String>, name: &str) -> napi::Result
   }
 }
 
-fn validate_signed_file(path: &Path) -> napi::Result<()> {
+fn validate_signed_file(path: &str) -> napi::Result<()> {
+  let path = Path::new(path);
   let allowed_extensions = allowed_extensions();
 
   if !fs::metadata(path)?.is_file() {
@@ -453,9 +453,11 @@ fn get_certificate_subject(cert_chain_context: CERT_CHAIN_CONTEXT) -> String {
 
 #[cfg(test)]
 mod test {
+
   use super::*;
 
   const SIGNED_PATH: &str = "./test_signed_data/signed_exes";
+
   fn assert_string_hashmap_eq(
     map1: HashMap<String, String>,
     map2: HashMap<String, String>,

@@ -2,7 +2,7 @@ mod wmi_query_handler;
 mod wmi_variant;
 
 use napi::Result;
-use wmi_query_handler::{WMIQueryHandler, QueryResult};
+use wmi_query_handler::{QueryResult, WMIQueryHandler};
 
 #[napi]
 pub struct Wmi {
@@ -32,7 +32,7 @@ impl Wmi {
     })
   }
 
-  /// Query the COM service previously initalted and get back a json parsable response
+  /// Query the COM service previously initialized and get back a json response
   ///
   /// ```
   /// import {WMI} from 'wmi'
@@ -42,17 +42,8 @@ impl Wmi {
   /// ```
   ///
   #[napi]
-  pub fn query(&self, query: Option<String>) -> Result<QueryResult> {
-    match query {
-      Some(query_string) => {
-        let result = self.query_handler.execute_query(query_string)?;
-        Ok(result)
-      }
-      None => Err(napi::Error::new(
-        napi::Status::GenericFailure,
-        "query parameter is not provided",
-      )),
-    }
+  pub fn query(&self, query: String) -> Result<QueryResult> {
+    self.query_handler.execute_query(query)
   }
 
   /// Change the namespace you are querying without having to make a new instance of Wmi

@@ -1,8 +1,8 @@
-use std::ptr;
 use napi::{
   bindgen_prelude::{check_status, ToNapiValue},
   sys,
 };
+use std::ptr;
 use windows::Win32::System::Variant::{
   VARIANT, VT_BOOL, VT_BSTR, VT_EMPTY, VT_I2, VT_I4, VT_I8, VT_NULL, VT_R4, VT_R8, VT_UI1, VT_UINT,
 };
@@ -128,50 +128,33 @@ mod test {
     },
   };
 
-
-
   fn create_variant(vt: VARENUM, value: WMIVariant) -> VARIANT {
     let inner_value = match value {
       WMIVariant::BStr(_bstr) => VARIANT_0_0_0 {
-            bstrVal: ManuallyDrop::new(BSTR::new()),
-        },
-        WMIVariant::I2(i) => VARIANT_0_0_0 {
-            iVal: i,
-        },
-        WMIVariant::I4(i) => VARIANT_0_0_0 {
-          lVal: i,
-        },
-        WMIVariant::I8(i) => VARIANT_0_0_0 {
-            llVal: i,
-        },
-        WMIVariant::R4(i) => VARIANT_0_0_0 {
-          intVal: i,
+        bstrVal: ManuallyDrop::new(BSTR::new()),
       },
-        WMIVariant::R8(i) => VARIANT_0_0_0 {
-          dblVal: i,
+      WMIVariant::I2(i) => VARIANT_0_0_0 { iVal: i },
+      WMIVariant::I4(i) => VARIANT_0_0_0 { lVal: i },
+      WMIVariant::I8(i) => VARIANT_0_0_0 { llVal: i },
+      WMIVariant::R4(i) => VARIANT_0_0_0 { intVal: i },
+      WMIVariant::R8(i) => VARIANT_0_0_0 { dblVal: i },
+      WMIVariant::Uint(i) => VARIANT_0_0_0 { uintVal: i },
+      WMIVariant::UI1(i) => VARIANT_0_0_0 { bVal: i },
+      WMIVariant::Bool(_i) => VARIANT_0_0_0 {
+        boolVal: VARIANT_BOOL::default(),
       },
-        WMIVariant::Uint(i) => VARIANT_0_0_0 {
-          uintVal: i,
-      },
-        WMIVariant::UI1(i) => VARIANT_0_0_0 {
-          bVal: i,
-      },
-        WMIVariant::Bool(_i) => VARIANT_0_0_0 {
-          boolVal: VARIANT_BOOL::default(),
-      },
-
     };
 
     VARIANT {
-        Anonymous: VARIANT_0 {
-            Anonymous: ManuallyDrop::new(VARIANT_0_0 {
-                vt,
-                Anonymous: inner_value,
-                ..Default::default()
-            }),
-        },
+      Anonymous: VARIANT_0 {
+        Anonymous: ManuallyDrop::new(VARIANT_0_0 {
+          vt,
+          Anonymous: inner_value,
+          ..Default::default()
+        }),
+      },
     }
-}
+  }
 
   #[test]
   fn test_process_variant_bstr() {
@@ -227,7 +210,7 @@ mod test {
     let result = process_variant(&mock_variant);
     assert!(result.is_some());
   }
- 
+
   #[test]
   fn test_process_variant_empty() {
     let mock_variant = VARIANT {
