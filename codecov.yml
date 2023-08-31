@@ -1,0 +1,3 @@
+ignore:
+  - "src/signatures/mod.rs"
+  - "src/wmi/mod.rs"

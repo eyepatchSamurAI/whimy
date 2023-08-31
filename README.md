@@ -1,3 +1,4 @@
+[![npm version](https://badge.fury.io/js/whimy.svg)](https://badge.fury.io/js/whimy)
 ![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)
 [![whimy-ci](https://github.com/eyepatchSamurAI/whimy/actions/workflows/CI.yml/badge.svg)](https://github.com/eyepatchSamurAI/whimy/actions/workflows/CI.yml)
 [![codecov](https://codecov.io/gh/eyepatchSamurAI/whimy/graph/badge.svg?token=WCSPL1LGEF)](https://codecov.io/gh/eyepatchSamurAI/whimy)
