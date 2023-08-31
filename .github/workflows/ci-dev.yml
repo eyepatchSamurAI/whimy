@@ -29,11 +29,13 @@ jobs:
         run: cargo install cargo-tarpaulin
         shell: powershell
     
-      - name: Install yarn
-        run: npm install --global yarn
+      # - name: Install yarn
+      #   run: npm install --global yarn
         
       - name: Install Dependencies
-        run: yarn install
+        run: npm install
+      # - name: Install Dependencies
+      #   run: yarn install
 
       - name: Get version from package.json
         run: .\scripts\getVersion.ps1
@@ -43,9 +45,9 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ~/node_modules
-          key: ${{ runner.OS }}-yarn-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.OS }}-npm-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.OS }}-yarn-
+            ${{ runner.OS }}-npm-
    
       - name: Cache Cargo dependencies
         uses: actions/cache@v2
@@ -83,9 +85,12 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Yarn Build | Compile
-        run: yarn build
+      - name: Build | Compile
+        run: npm build
         shell: powershell
+      # - name: Yarn Build | Compile
+      #   run: yarn build
+      #   shell: powershell
     
       - name: Authenticate with npm
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
