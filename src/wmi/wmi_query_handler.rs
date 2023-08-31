@@ -1,5 +1,6 @@
 use crate::wmi::wmi_variant::{process_variant, WMIVariant};
 use std::{boxed::Box, collections::HashMap, ffi::OsStr, os::windows::prelude::OsStrExt};
+use tokio::task;
 use windows::{
   core::{BSTR, PCWSTR},
   Win32::System::{
