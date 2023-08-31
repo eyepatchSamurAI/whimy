@@ -1,7 +1,7 @@
 {
   "name": "whimy",
   "description": "Access WMI and other low level Window features from node",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "os": [
