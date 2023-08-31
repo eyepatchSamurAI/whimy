@@ -8,9 +8,10 @@
     "win32"
   ],
   "keywords": [
-    "napi",
+    "napi-rs",
     "rust",
-    "native"
+    "native",
+    "windows"
   ],
   "author": "EyepatchSamurAI",
   "files": [
@@ -39,8 +40,5 @@
     "build:debug": "napi build --platform",
     "universal": "napi universal",
     "version": "napi version"
-  },
-  "optionalDependencies": {
-    "whimy-win32-x64-msvc": "0.0.1"
   }
 }
