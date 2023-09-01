@@ -1,5 +1,6 @@
 use crate::wmi::wmi_variant::{process_variant, WMIVariant};
 use std::{boxed::Box, collections::HashMap, ffi::OsStr, os::windows::prelude::OsStrExt};
+use napi::{Env, Task};
 use tokio::task;
 use windows::{
   core::{BSTR, PCWSTR},
@@ -19,6 +20,37 @@ use windows::{
     },
   },
 };
+
+
+pub struct AsyncWMIQuery {
+  pub namespace: String,
+  pub query: String
+}
+
+impl AsyncWMIQuery {
+  pub fn new(namespace: String, query: String) -> Self {
+    AsyncWMIQuery { namespace, query }
+  }
+}
+
+#[napi]
+impl Task for AsyncWMIQuery {
+  type Output = QueryResult;
+  type JsValue = QueryResult;
+ 
+  fn compute(&mut self) -> napi::Result<Self::Output> {
+    let mut wmi = WMIQueryHandler::new(self.namespace.clone())?;
+    let result = wmi.execute_query(self.query.clone());
+    wmi.stop();
+    result
+
+  }
+ 
+  fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+    Ok(output)
+  }
+}
+
 
 pub type QueryResult = HashMap<String, Vec<Option<WMIVariant>>>;
 
@@ -381,5 +413,20 @@ mod test {
         let _ = SafeArrayDestroy(psa);
       }
     }
+  }
+
+  #[test]
+  fn failed_initialize_security_twice() {
+    unsafe {
+      let _ = CoInitializeEx(None, COINIT_MULTITHREADED)
+        .map_err(|_error| napi::Error::from_reason("Failed to Initialize COM"));
+    };
+    
+    let init_security = WMIQueryHandler::initialize_security();
+    println!("{:?}", init_security);
+    assert!(init_security.is_ok());
+    let bad_init_security = WMIQueryHandler::initialize_security();
+    assert!(bad_init_security.is_err())
+
   }
 }

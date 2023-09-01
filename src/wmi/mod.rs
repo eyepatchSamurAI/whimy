@@ -1,8 +1,10 @@
 mod wmi_query_handler;
 mod wmi_variant;
 
-use napi::Result;
+use napi::{Result, bindgen_prelude::AsyncTask};
 use wmi_query_handler::{QueryResult, WMIQueryHandler};
+
+use self::wmi_query_handler::AsyncWMIQuery;
 
 #[napi]
 pub struct Wmi {
@@ -44,6 +46,11 @@ impl Wmi {
   #[napi]
   pub fn query(&self, query: String) -> Result<QueryResult> {
     self.query_handler.execute_query(query)
+  }
+  
+  #[napi]
+  pub fn async_query(&self, namespace: String, query: String) -> AsyncTask<AsyncWMIQuery> {
+    AsyncTask::new(AsyncWMIQuery {namespace, query})
   }
 
   /// Change the namespace you are querying without having to make a new instance of Wmi
