@@ -27,6 +27,7 @@ windows = { version = "0.51.1", features = [
     "Win32_Security_Cryptography_Catalog",
 ] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "io-util", "macros"] }
+lazy_static = "1.4.0"
 
 
 [build-dependencies]

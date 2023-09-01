@@ -1,7 +1,6 @@
 use crate::wmi::wmi_variant::{process_variant, WMIVariant};
-use std::{boxed::Box, collections::HashMap, ffi::OsStr, os::windows::prelude::OsStrExt};
-use napi::{Env, Task};
-use tokio::task;
+use std::{boxed::Box, collections::HashMap, ffi::OsStr, os::windows::prelude::OsStrExt, sync::Mutex};
+use napi::{Env, Task, AsyncWorkPromise};
 use windows::{
   core::{BSTR, PCWSTR},
   Win32::System::{
@@ -20,6 +19,71 @@ use windows::{
     },
   },
 };
+
+// fn initialize_security() ->  Box<dyn FnMut() -> Result<(), napi::Error>> {
+//   let mut initialized = false;
+//   println!("{:?}", initialized);
+//   Box::new(move || {
+//       if !initialized {
+//           unsafe {
+//             CoInitializeSecurity(
+//               None,
+//               -1,
+//               None,
+//               None,
+//               RPC_C_AUTHN_LEVEL_DEFAULT,
+//               RPC_C_IMP_LEVEL_IMPERSONATE,
+//               None,
+//               EOAC_NONE,
+//               None,
+//             )
+//           }
+//           .map_err(|_error| napi::Error::from_reason("Failed to initialize security"))?;
+          
+//           initialized = true;
+//           println!("Initialized");
+//           Ok(())
+//       } else {
+//           println!("Already initialized");
+//           Ok(())
+//       }
+//   })
+// }
+
+lazy_static! {
+  static ref SECURITY_INITIALIZER: Mutex<SecurityInitializer> = Mutex::new(SecurityInitializer { initialized: false });
+}
+
+pub struct SecurityInitializer {
+  initialized: bool,
+}
+
+impl SecurityInitializer {
+  pub fn initialize(&mut self) -> napi::Result<()> {
+      if !self.initialized {
+        unsafe {
+          CoInitializeSecurity(
+            None,
+            -1,
+            None,
+            None,
+            RPC_C_AUTHN_LEVEL_DEFAULT,
+            RPC_C_IMP_LEVEL_IMPERSONATE,
+            None,
+            EOAC_NONE,
+            None,
+          )
+        }
+        .map_err(|_error| napi::Error::from_reason("Failed to initialize security"))?;
+          self.initialized = true;
+          println!("Initialized");
+          Ok(())
+      } else {
+          println!("Already initialized");
+          Ok(())
+      }
+  }
+}
 
 
 pub struct AsyncWMIQuery {
@@ -60,13 +124,24 @@ pub struct WMIQueryHandler {
 }
 
 impl WMIQueryHandler {
+
   pub fn new(namespace: String) -> napi::Result<Self> {
     unsafe {
       CoInitializeEx(None, COINIT_MULTITHREADED)
         .map_err(|_error| napi::Error::from_reason("Failed to Initialize COM"))?;
     };
 
-    WMIQueryHandler::initialize_security()?;
+    let mut initializer = SECURITY_INITIALIZER.lock().map_err(|e| {
+      // Log the error or convert it to your application's error type
+      napi::Error::from_reason(format!("Failed to acquire lock: {}", e))
+  })?;
+  
+  let result = initializer.initialize();
+  if let Err(e) = result {
+      // Log the error or convert it to your application's error type
+      return Err(napi::Error::from_reason(format!("Failed to initialize: {}", e)));
+  }
+  
 
     let server = WMIQueryHandler::connect_to_wmi_namespace(&namespace)?;
 
@@ -123,23 +198,23 @@ impl WMIQueryHandler {
     Ok(())
   }
 
-  pub fn initialize_security() -> napi::Result<()> {
-    unsafe {
-      CoInitializeSecurity(
-        None,
-        -1,
-        None,
-        None,
-        RPC_C_AUTHN_LEVEL_DEFAULT,
-        RPC_C_IMP_LEVEL_IMPERSONATE,
-        None,
-        EOAC_NONE,
-        None,
-      )
-    }
-    .map_err(|_error| napi::Error::from_reason("Failed to initialize security"))?;
-    Ok(())
-  }
+  // pub fn initialize_security() -> napi::Result<()> {
+  //   unsafe {
+  //     CoInitializeSecurity(
+  //       None,
+  //       -1,
+  //       None,
+  //       None,
+  //       RPC_C_AUTHN_LEVEL_DEFAULT,
+  //       RPC_C_IMP_LEVEL_IMPERSONATE,
+  //       None,
+  //       EOAC_NONE,
+  //       None,
+  //     )
+  //   }
+  //   .map_err(|_error| napi::Error::from_reason("Failed to initialize security"))?;
+  //   Ok(())
+  // }
 
   fn connect_to_wmi_namespace(namespace: &str) -> napi::Result<IWbemServices> {
     let locator: IWbemLocator =
@@ -415,18 +490,33 @@ mod test {
     }
   }
 
-  #[test]
-  fn failed_initialize_security_twice() {
-    unsafe {
-      let _ = CoInitializeEx(None, COINIT_MULTITHREADED)
-        .map_err(|_error| napi::Error::from_reason("Failed to Initialize COM"));
-    };
+  // #[test]
+  // fn failed_initialize_security_twice() {
+  //   unsafe {
+  //     let _ = CoInitializeEx(None, COINIT_MULTITHREADED)
+  //       .map_err(|_error| napi::Error::from_reason("Failed to Initialize COM"));
+  //   };
     
-    let init_security = WMIQueryHandler::initialize_security();
-    println!("{:?}", init_security);
-    assert!(init_security.is_ok());
-    let bad_init_security = WMIQueryHandler::initialize_security();
-    assert!(bad_init_security.is_err())
+  //   let init_security = WMIQueryHandler::initialize_security();
+  //   println!("{:?}", init_security);
+  //   assert!(init_security.is_ok());
+  //   let bad_init_security = WMIQueryHandler::initialize_security();
+  //   assert!(bad_init_security.is_err());
 
+  //   unsafe {
+  //     CoUninitialize();
+  //   };
+  // }
+
+  #[test]
+  fn test_call_new_multiple_times() {
+    let wmi1 = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    let wmi2 = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    let wmi3 = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    assert!(wmi1.is_ok());
+    println!("{:?}", wmi2);
+    assert!(wmi2.is_ok());
+    wmi1.unwrap().stop();
+    wmi2.unwrap().stop();
   }
 }

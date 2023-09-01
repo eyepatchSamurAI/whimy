@@ -1,4 +1,5 @@
 #![deny(clippy::all)]
+#![feature(once_cell_try)]
 
 mod registries;
 mod signatures;
@@ -7,3 +8,6 @@ mod async_wmi;
 
 #[macro_use]
 extern crate napi_derive;
+#[macro_use]
+extern crate lazy_static;
+
