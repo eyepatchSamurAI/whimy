@@ -1,5 +1,4 @@
 #![deny(clippy::all)]
-#![feature(once_cell_try)]
 
 mod registries;
 mod signatures;
