@@ -27,7 +27,7 @@ By adopting Whimy, developers gain:
 import { Wmi } from 'whimy';
 
 const wmi = new Wmi(`root\\cimv2`);
-const queryString = wmi.query("Select * From Win32_processor");
+const queryString = wmi.syncQuery("Select * From Win32_processor");
 const query = JSON.parse(queryString);
 console.log(query);
 wmi.stop();
