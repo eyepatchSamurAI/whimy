@@ -66,9 +66,6 @@ jobs:
         shell: powershell
         working-directory: ./test_signed_data/custom_signed
       
-      - name: Node tests
-        run: npm run test
-
       - name: Collect test coverage
         run : cargo tarpaulin --exclude-files "*\\mod.rs" --out Xml -- --test-threads=1
       
@@ -80,6 +77,13 @@ jobs:
       - name: Build | Compile
         run: npm run build
         shell: powershell
+      
+      - name: Node install test async
+        run: npm install
+        working-directory: ./test_node
+      
+      - name: Node test async
+        run: npm run test
     
       - name: Authenticate with npm
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc

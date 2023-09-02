@@ -81,6 +81,13 @@ jobs:
         run: npm run build
         shell: powershell
       
+      - name: Node install test async
+        run: npm install
+        working-directory: ./test_node
+      
+      - name: Node test async
+        run: npm run test
+      
       - name: Create and push tag
         run: |
           git config --local user.email "action@github.com"
