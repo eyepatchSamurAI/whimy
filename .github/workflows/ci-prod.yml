@@ -32,6 +32,10 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Build | Compile
+        run: npm run build
+        shell: powershell
+
       - name: Get version from package.json
         run: .\scripts\getVersion.ps1
         shell: powershell
@@ -73,10 +77,6 @@ jobs:
         uses: codecov/codecov-action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Build | Compile
-        run: npm run build
-        shell: powershell
       
       - name: Node install test async
         run: npm install
