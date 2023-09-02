@@ -7,7 +7,7 @@ use windows::Win32::System::Variant::{
   VARIANT, VT_BOOL, VT_BSTR, VT_EMPTY, VT_I2, VT_I4, VT_I8, VT_NULL, VT_R4, VT_R8, VT_UI1, VT_UINT,
 };
 
-// TODO see if there is a faster method. Not any faster than just using serde_json::to_string
+// Is there a faster method? This is not any faster than just using serde_json::to_string
 impl ToNapiValue for WMIVariant {
   unsafe fn to_napi_value(env: sys::napi_env, val: Self) -> napi::Result<sys::napi_value> {
     let mut raw_value = ptr::null_mut();

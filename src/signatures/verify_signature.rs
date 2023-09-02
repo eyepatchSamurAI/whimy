@@ -281,14 +281,17 @@ fn parse_dn(seq: &str) -> HashMap<String, String> {
 
       if ch == '\\' {
         if let Some(first) = chars.next() {
-          let hex_str = format!("{}{}", first, chars.peek().unwrap_or(&' '));
-          if let Ok(ord) = u8::from_str_radix(&hex_str, 16) {
-            chars.next();
-            token.push(char::from(ord));
-            continue;
-          } else {
-            token.push(first);
+          // Only consider the next two characters as a hex sequence
+          if let (Some(second), Some(third)) = (chars.next(), chars.next()) {
+            let hex_str = format!("{}{}", second, third);
+            if let Ok(ord) = u8::from_str_radix(&hex_str, 16) {
+              token.push(char::from(ord));
+              continue;
+            }
           }
+          // Not a hex sequence, put back the characters we took out
+          token.push('\\');
+          token.push(first);
         }
         continue;
       }
@@ -523,6 +526,19 @@ mod test {
     let dn_multiple_names_result = parse_dn(&dn_multiple_names);
 
     assert_eq!(dn_multiple_names_result, dn_multiple_names_expected);
+  }
+
+  #[test]
+  fn test_parse_dn_with_escaped_characters() {
+    // Test case where hex representation is valid
+    let dn_hex_valid = r#"CN=Test\x20Group,OU=Groups,DC=Company"#;
+    let mut dn_hex_valid_expected = HashMap::new();
+    dn_hex_valid_expected.insert("CN".to_string(), "Test Group".to_string());
+    dn_hex_valid_expected.insert("OU".to_string(), "Groups".to_string());
+    dn_hex_valid_expected.insert("DC".to_string(), "Company".to_string());
+
+    let dn_hex_valid_result = parse_dn(&dn_hex_valid);
+    assert_eq!(dn_hex_valid_result, dn_hex_valid_expected);
   }
 
   #[test]
