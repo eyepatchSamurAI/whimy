@@ -8,9 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
-napi = { version = "2.13.3", default-features = false, features = [
-    "napi4",
-] }
+napi = { version = "2.13.3", default-features = false }
 napi-derive = "2.13.0"
 windows = { version = "0.51.1", features = [
     "Win32_Foundation",
@@ -18,10 +16,8 @@ windows = { version = "0.51.1", features = [
     "Win32_System_Ole",
     "Win32_System_Wmi",
     "Win32_System_Rpc",
-    "Win32_Security",
     "Win32_System_Variant",
     "Win32_Security_WinTrust",
-    "Win32_Security_Cryptography",
     "Win32_Security_Cryptography_Sip",
     "Win32_Security_Cryptography_Catalog",
 ] }
