@@ -22,6 +22,8 @@ use windows::{
   },
 };
 
+pub type QueryResult = HashMap<String, Vec<Option<WMIVariant>>>;
+
 lazy_static! {
   static ref SECURITY_INITIALIZER: Mutex<SecurityInitializer> =
     Mutex::new(SecurityInitializer { initialized: false });
@@ -81,8 +83,6 @@ impl Task for AsyncWMIQuery {
   }
 }
 
-pub type QueryResult = HashMap<String, Vec<Option<WMIVariant>>>;
-
 #[derive(Debug)]
 pub struct WMIQueryHandler {
   server: Option<IWbemServices>, // Allows us to deref by setting to None
@@ -96,17 +96,14 @@ impl WMIQueryHandler {
     };
 
     let mut initializer = SECURITY_INITIALIZER.lock().map_err(|e| {
-      // Log the error or convert it to your application's error type
       napi::Error::from_reason(format!("Failed to acquire lock: {}", e))
     })?;
 
     let result = initializer.initialize();
-    if let Err(e) = result {
-      // Log the error or convert it to your application's error type
-      return Err(napi::Error::from_reason(format!(
-        "Failed to initialize: {}",
-        e
-      )));
+    if let Err(_e) = result {
+      return Err(napi::Error::from_reason(
+        "Failed to initialize security, check if WMI is working correctly",
+      ));
     }
 
     let server = WMIQueryHandler::connect_to_wmi_namespace(&namespace)?;
@@ -359,18 +356,6 @@ mod test {
   }
 
   #[test]
-  fn failed_new_initialize_security() {
-    let failed_initialize_security = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
-    assert!(failed_initialize_security.is_ok());
-    let mut failed_initialize_query_handler = failed_initialize_security.unwrap();
-
-    let too_many_inits = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
-    assert!(too_many_inits.is_err());
-    assert!(&too_many_inits.is_err_and(|error| error.reason == "Failed to initialize security"));
-    failed_initialize_query_handler.stop();
-  }
-
-  #[test]
   fn failed_new_bad_namespace() {
     let bad_namespace = WMIQueryHandler::new(r#"bad\name"#.to_string());
     assert!(
@@ -442,12 +427,33 @@ mod test {
   fn test_call_new_multiple_times() {
     let wmi1 = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
     let wmi2 = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
-    let wmi3: Result<WMIQueryHandler, napi::Error> =
-      WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    let wmi3 = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
     assert!(wmi1.is_ok());
     assert!(wmi2.is_ok());
     assert!(wmi3.is_ok());
     wmi1.unwrap().stop();
     wmi2.unwrap().stop();
+  }
+
+  #[test]
+  fn test_async_query_can_be_called_while_sync_connection() {
+    let wmi_ok = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    let mut async_wmi_query = AsyncWMIQuery::new(
+      r#"root\cimv2"#.to_string(),
+      "SELECT Model FROM Win32_ComputerSystem".to_string(),
+    );
+    let compute_result = async_wmi_query.compute();
+    assert!(compute_result.is_ok());
+    assert!(wmi_ok.is_ok());
+    let mut wmi = wmi_ok.unwrap();
+    let sync_query_result = wmi.execute_query("SELECT Model FROM Win32_ComputerSystem".to_string());
+    assert!(sync_query_result.is_ok());
+    wmi.stop();
+    let mut async_wmi_query2 = AsyncWMIQuery::new(
+      r#"root\cimv2"#.to_string(),
+      "SELECT Model FROM Win32_ComputerSystem".to_string(),
+    );
+    let compute_result2 = async_wmi_query2.compute();
+    assert!(compute_result2.is_ok());
   }
 }

@@ -28,7 +28,6 @@ windows = { version = "0.51.1", features = [
 
 lazy_static = "1.4.0"
 
-
 [build-dependencies]
 napi-build = "2.0.1"
 

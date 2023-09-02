@@ -1,6 +1,5 @@
 #![deny(clippy::all)]
 
-mod registries;
 mod signatures;
 mod wmi;
 
@@ -8,4 +7,3 @@ mod wmi;
 extern crate napi_derive;
 #[macro_use]
 extern crate lazy_static;
-

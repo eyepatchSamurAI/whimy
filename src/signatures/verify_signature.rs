@@ -38,18 +38,11 @@ impl TrustStatus {
       subject: String::new(),
     }
   }
-  pub fn from_values(signed: bool, message: &str, subject: &str) -> Self {
-    TrustStatus {
-      signed,
-      message: message.to_string(),
-      subject: subject.to_string(),
-    }
-  }
 }
 
 impl Default for TrustStatus {
   fn default() -> Self {
-    TrustStatus::new()
+    Self::new()
   }
 }
 
@@ -74,17 +67,13 @@ pub fn verify_signature_by_publisher(
 
   Ok(TrustStatus {
     signed: false,
-    message: format!(
-      "Publisher name does not match.\n\n Given: {} \n\n Expected: {}",
-      final_subject,
-      publish_names.join(","),
-    ),
+    message: "Publisher name does not match.".to_string(),
     subject: final_subject,
   })
 }
 
 pub fn verify_signature_from_path(file_path: &str) -> napi::Result<TrustStatus> {
-  let mut trust_status = TrustStatus::new();
+  let mut trust_status = TrustStatus::default();
 
   let constant_wstring_bytes = OsStr::new(Path::new(&file_path))
     .encode_wide()
@@ -480,12 +469,12 @@ mod test {
   }
 
   fn assert_trust_status_eq(trusted_status: &TrustStatus, expected: &TrustStatus) -> bool {
-    println!("expected {:?}", expected);
-    println!("trusted_status {:?}", trusted_status);
-    if trusted_status.signed != expected.signed || trusted_status.message != expected.message {
+    println!("expected {:#?}", expected);
+    println!("trusted_status {:#?}", trusted_status);
+    if trusted_status.subject.len() != expected.subject.len() {
       return false;
     }
-    if trusted_status.subject.len() != expected.subject.len() {
+    if trusted_status.signed != expected.signed || trusted_status.message != expected.message {
       return false;
     }
     let expected_subject_map = parse_dn(&expected.subject);
@@ -634,6 +623,27 @@ mod test {
       message: "Verification succeeded!".to_string(),
       subject: expected_subject,
       signed: true,
+    };
+    assert!(signature_status.is_ok());
+    assert!(assert_trust_status_eq(
+      &signature_status.unwrap(),
+      &expected
+    ));
+  }
+
+  #[test]
+  fn test_signature_does_not_match() {
+    let correct_publisher_subject = r#"S="Washington",L="Redmond",OU="Microsoft Corporation",C="US",CN="Microsoft Corporation",SERIALNUMBER="230865+470561",O="Microsoft Corporation","#;
+    let incorrect_publisher_subject = r#"CN="Microsoft Corporationn",L="Redmondd",O="Microsoft Corporationn",OU="Microsoft Corporationn",C="US",S="Washington""#;
+
+    let file_path = format!("{SIGNED_PATH}/microsoft_signed.exe");
+    let publisher_names = vec![String::from(incorrect_publisher_subject)];
+    let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
+    let expected = TrustStatus {
+      message: "Publisher name does not match.".to_string(),
+      // message: format!("Publisher name does not match.\n\n Given: {correct_publisher_subject} \n\n Expected: {incorrect_publisher_subject}"),
+      subject: correct_publisher_subject.to_string(),
+      signed: false,
     };
     assert!(signature_status.is_ok());
     assert!(assert_trust_status_eq(

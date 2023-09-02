@@ -28,16 +28,21 @@ jobs:
       - name: Install Tarpaulin
         run: cargo install cargo-tarpaulin
         shell: powershell
-    
-      - name: Install yarn
-        run: npm install --global yarn
-        
+      
       - name: Install Dependencies
-        run: yarn install
+        run: npm install
 
       - name: Get version from package.json
         run: .\scripts\getVersion.ps1
         shell: powershell
+      
+      - name: Cache npm dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/node_modules
+          key: ${{ runner.OS }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.OS }}-npm-
 
       - name: Cache Cargo dependencies
         uses: actions/cache@v2
@@ -50,14 +55,32 @@ jobs:
           restore-keys: |
             ${{ runner.OS }}-cargo-
 
-      - name: Cache npm dependencies
-        uses: actions/cache@v2
-        with:
-          path: ~/node_modules
-          key: ${{ runner.OS }}-yarn-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.OS }}-yarn-
+      - name: Format
+        run: cargo fmt
 
+      - name: Lint
+        run: cargo clippy
+
+      - name: Setup Certificate
+        run: .\setting_up_cert_testing.ps1
+        shell: powershell
+        working-directory: ./test_signed_data/custom_signed
+      
+      - name: Node tests
+        run: npm run test
+
+      - name: Collect test coverage
+        run : cargo tarpaulin --exclude-files "*\\mod.rs" --out Xml -- --test-threads=1
+      
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Build | Compile
+        run: npm run build
+        shell: powershell
+      
       - name: Create and push tag
         run: |
           git config --local user.email "action@github.com"
@@ -75,35 +98,7 @@ jobs:
           draft: false
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}     
-
-  deploy:
-    needs: [create-release]
-    name: Deploy
-    runs-on: windows-2019
-    steps:
-      - name: Format
-        run: cargo fmt
-
-      - name: Lint
-        run: cargo clippy
-
-      - name: Setup Certificate
-        run: .\setting_up_cert_testing.ps1
-        shell: powershell
-        working-directory: ./test_signed_data/custom_signed
-
-      - name: Collect test coverage
-        run : cargo tarpaulin --exclude-files "*\\mod.rs" --out Xml -- --test-threads=1
-      
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Yarn Build | Compile
-        run: yarn build
-        shell: powershell
+          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}    
     
       - name: Authenticate with npm
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc

@@ -28,14 +28,9 @@ jobs:
       - name: Install Tarpaulin
         run: cargo install cargo-tarpaulin
         shell: powershell
-    
-      # - name: Install yarn
-      #   run: npm install --global yarn
         
       - name: Install Dependencies
         run: npm install
-      # - name: Install Dependencies
-      #   run: yarn install
 
       - name: Get version from package.json
         run: .\scripts\getVersion.ps1
@@ -60,12 +55,6 @@ jobs:
           restore-keys: |
             ${{ runner.OS }}-cargo-
         
-
-  deploy:
-    needs: [create-release]
-    name: Deploy
-    runs-on: windows-2019
-    steps:
       - name: Format
         run: cargo fmt
 
@@ -76,6 +65,9 @@ jobs:
         run: .\setting_up_cert_testing.ps1
         shell: powershell
         working-directory: ./test_signed_data/custom_signed
+      
+      - name: Node tests
+        run: npm run test
 
       - name: Collect test coverage
         run : cargo tarpaulin --exclude-files "*\\mod.rs" --out Xml -- --test-threads=1
@@ -86,11 +78,8 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Build | Compile
-        run: npm build
+        run: npm run build
         shell: powershell
-      # - name: Yarn Build | Compile
-      #   run: yarn build
-      #   shell: powershell
     
       - name: Authenticate with npm
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
