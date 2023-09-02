@@ -35,7 +35,7 @@ jobs:
       - name: Get version from package.json
         run: .\scripts\getVersion.ps1
         shell: powershell
-      
+    
       - name: Cache npm dependencies
         uses: actions/cache@v2
         with:
@@ -43,7 +43,7 @@ jobs:
           key: ${{ runner.OS }}-npm-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.OS }}-npm-
-
+            
       - name: Cache Cargo dependencies
         uses: actions/cache@v2
         with:
@@ -65,9 +65,6 @@ jobs:
         run: .\setting_up_cert_testing.ps1
         shell: powershell
         working-directory: ./test_signed_data/custom_signed
-      
-      - name: Node tests
-        run: npm run test
 
       - name: Collect test coverage
         run : cargo tarpaulin --exclude-files "*\\mod.rs" --out Xml -- --test-threads=1
@@ -97,15 +94,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}
 
-      - name: Create GitHub release
-        uses: actions/create-release@v1
-        with:
-          tag_name: ${{ env.VERSION }}
-          release_name: ${{ env.VERSION }} Release
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}    
+      - name: Npm Build | Compile
+        run: npm run build
+        shell: powershell
     
       - name: Authenticate with npm
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
