@@ -1,6 +1,5 @@
 mod verify_signature;
 use self::verify_signature::{verify_signature_from_path, TrustStatus};
-use std::path::Path;
 pub use verify_signature::{allowed_extensions, verify_signature_by_publisher};
 
 #[napi(js_name = "signatures")]
@@ -35,7 +34,7 @@ impl Signatures {
   ///
   #[napi]
   pub fn verify_signature_from_path(path: String) -> napi::Result<TrustStatus> {
-    verify_signature_from_path(Path::new(&path))
+    verify_signature_from_path(&path)
   }
 
   /// Verifies a file given a list of publisher names

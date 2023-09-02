@@ -1,16 +1,17 @@
 {
   "name": "whimy",
-  "description": "Access WMI and other low level Window features from node",
-  "version": "0.0.2",
+  "description": "Access WMI and perform other low level Window features from node",
+  "version": "0.0.3",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "os": [
     "win32"
   ],
   "keywords": [
-    "napi",
+    "napi-rs",
     "rust",
-    "native"
+    "native",
+    "windows"
   ],
   "author": "EyepatchSamurAI",
   "files": [
@@ -27,20 +28,22 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@napi-rs/cli": "^2.16.3"
+    "@napi-rs/cli": "^2.16.3",
+    "ava": "^5.3.1"
+  },
+  "ava": {
+    "timeout": "3m"
   },
   "engines": {
     "node": ">= 10"
   },
   "scripts": {
     "napi": "napi",
+    "test": "ava test_node/*.test.*",
     "artifacts": "napi artifacts",
     "build": "napi build --platform --release build",
     "build:debug": "napi build --platform",
     "universal": "napi universal",
     "version": "napi version"
-  },
-  "optionalDependencies": {
-    "whimy-win32-x64-msvc": "0.0.1"
   }
 }

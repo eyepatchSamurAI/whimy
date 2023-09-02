@@ -1,0 +1,109 @@
+name: whimy-ci
+run-name: ${{ github.run_id }} tests
+on:
+  push:
+    branches: 
+      - main
+jobs:
+  create-release:
+    runs-on: windows-2019
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Install nightly
+        run: rustup toolchain add nightly
+
+      - name: Install Tarpaulin
+        run: cargo install cargo-tarpaulin
+        shell: powershell
+      
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build | Compile
+        run: npm run build
+        shell: powershell
+
+      - name: Get version from package.json
+        run: .\scripts\getVersion.ps1
+        shell: powershell
+    
+      - name: Cache npm dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/node_modules
+          key: ${{ runner.OS }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.OS }}-npm-
+            
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.OS }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.OS }}-cargo-
+
+      - name: Format
+        run: cargo fmt
+
+      - name: Lint
+        run: cargo clippy
+
+      - name: Setup Certificate
+        run: .\setting_up_cert_testing.ps1
+        shell: powershell
+        working-directory: ./test_signed_data/custom_signed
+
+      - name: Collect test coverage
+        run : cargo tarpaulin --exclude-files "*\\mod.rs" --out Xml -- --test-threads=1
+      
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      
+      - name: Node install test async
+        run: npm install
+        working-directory: ./test_node
+      
+      - name: Node test async
+        run: npm run test
+      
+      - name: Create and push tag
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag ${{ env.VERSION }}
+          git push --tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}
+
+      - name: Npm Build | Compile
+        run: npm run build
+        shell: powershell
+    
+      - name: Authenticate with npm
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
+      - name: Publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  

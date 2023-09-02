@@ -38,18 +38,11 @@ impl TrustStatus {
       subject: String::new(),
     }
   }
-  pub fn from_values(signed: bool, message: &str, subject: &str) -> Self {
-    TrustStatus {
-      signed,
-      message: message.to_string(),
-      subject: subject.to_string(),
-    }
-  }
 }
 
 impl Default for TrustStatus {
   fn default() -> Self {
-    TrustStatus::new()
+    Self::new()
   }
 }
 
@@ -58,9 +51,8 @@ pub fn verify_signature_by_publisher(
   publish_names: Vec<String>,
 ) -> napi::Result<TrustStatus> {
   let trimmed_path = file_path.trim_end();
-  let path: &Path = Path::new(trimmed_path);
-  validate_signed_file(path)?;
-  let result = verify_signature_from_path(path)?;
+  validate_signed_file(trimmed_path)?;
+  let result = verify_signature_from_path(trimmed_path)?;
   if !result.signed {
     return Ok(result);
   }
@@ -75,19 +67,15 @@ pub fn verify_signature_by_publisher(
 
   Ok(TrustStatus {
     signed: false,
-    message: format!(
-      "Publisher name does not match.\n\n Given: {} \n\n Expected: {}",
-      final_subject,
-      publish_names.join(","),
-    ),
+    message: "Publisher name does not match.".to_string(),
     subject: final_subject,
   })
 }
 
-pub fn verify_signature_from_path(file_path: &Path) -> napi::Result<TrustStatus> {
-  let mut trust_status = TrustStatus::new();
+pub fn verify_signature_from_path(file_path: &str) -> napi::Result<TrustStatus> {
+  let mut trust_status = TrustStatus::default();
 
-  let constant_wstring_bytes = OsStr::new(&file_path)
+  let constant_wstring_bytes = OsStr::new(Path::new(&file_path))
     .encode_wide()
     .chain(Some(0)) // Add null terminating character
     .collect::<Vec<u16>>();
@@ -293,14 +281,17 @@ fn parse_dn(seq: &str) -> HashMap<String, String> {
 
       if ch == '\\' {
         if let Some(first) = chars.next() {
-          let hex_str = format!("{}{}", first, chars.peek().unwrap_or(&' '));
-          if let Ok(ord) = u8::from_str_radix(&hex_str, 16) {
-            chars.next();
-            token.push(char::from(ord));
-            continue;
-          } else {
-            token.push(first);
+          // Only consider the next two characters as a hex sequence
+          if let (Some(second), Some(third)) = (chars.next(), chars.next()) {
+            let hex_str = format!("{}{}", second, third);
+            if let Ok(ord) = u8::from_str_radix(&hex_str, 16) {
+              token.push(char::from(ord));
+              continue;
+            }
           }
+          // Not a hex sequence, put back the characters we took out
+          token.push('\\');
+          token.push(first);
         }
         continue;
       }
@@ -367,7 +358,8 @@ fn check_dn_match(subject: &HashMap<String, String>, name: &str) -> napi::Result
   }
 }
 
-fn validate_signed_file(path: &Path) -> napi::Result<()> {
+fn validate_signed_file(path: &str) -> napi::Result<()> {
+  let path = Path::new(path);
   let allowed_extensions = allowed_extensions();
 
   if !fs::metadata(path)?.is_file() {
@@ -453,9 +445,11 @@ fn get_certificate_subject(cert_chain_context: CERT_CHAIN_CONTEXT) -> String {
 
 #[cfg(test)]
 mod test {
+
   use super::*;
 
   const SIGNED_PATH: &str = "./test_signed_data/signed_exes";
+
   fn assert_string_hashmap_eq(
     map1: HashMap<String, String>,
     map2: HashMap<String, String>,
@@ -478,12 +472,12 @@ mod test {
   }
 
   fn assert_trust_status_eq(trusted_status: &TrustStatus, expected: &TrustStatus) -> bool {
-    println!("expected {:?}", expected);
-    println!("trusted_status {:?}", trusted_status);
-    if trusted_status.signed != expected.signed || trusted_status.message != expected.message {
+    println!("expected {:#?}", expected);
+    println!("trusted_status {:#?}", trusted_status);
+    if trusted_status.subject.len() != expected.subject.len() {
       return false;
     }
-    if trusted_status.subject.len() != expected.subject.len() {
+    if trusted_status.signed != expected.signed || trusted_status.message != expected.message {
       return false;
     }
     let expected_subject_map = parse_dn(&expected.subject);
@@ -535,6 +529,19 @@ mod test {
   }
 
   #[test]
+  fn test_parse_dn_with_escaped_characters() {
+    // Test case where hex representation is valid
+    let dn_hex_valid = r#"CN=Test\x20Group,OU=Groups,DC=Company"#;
+    let mut dn_hex_valid_expected = HashMap::new();
+    dn_hex_valid_expected.insert("CN".to_string(), "Test Group".to_string());
+    dn_hex_valid_expected.insert("OU".to_string(), "Groups".to_string());
+    dn_hex_valid_expected.insert("DC".to_string(), "Company".to_string());
+
+    let dn_hex_valid_result = parse_dn(&dn_hex_valid);
+    assert_eq!(dn_hex_valid_result, dn_hex_valid_expected);
+  }
+
+  #[test]
   fn test_signature_for_exe() {
     let file_path = format!("{SIGNED_PATH}/microsoft_signed.exe");
     let publisher_names = vec![String::from(
@@ -583,7 +590,6 @@ mod test {
       r#"CN="Microsoft Corporation",L="Redmond",O="Microsoft Corporation",OU="Microsoft Corporation",C="US",S="Washington""#,
     )];
     let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
-    println!("signature_status: {:?}", signature_status);
 
     let expected = TrustStatus {
       message: "The file is not signed.".to_string(),
@@ -633,6 +639,27 @@ mod test {
       message: "Verification succeeded!".to_string(),
       subject: expected_subject,
       signed: true,
+    };
+    assert!(signature_status.is_ok());
+    assert!(assert_trust_status_eq(
+      &signature_status.unwrap(),
+      &expected
+    ));
+  }
+
+  #[test]
+  fn test_signature_does_not_match() {
+    let correct_publisher_subject = r#"S="Washington",L="Redmond",OU="Microsoft Corporation",C="US",CN="Microsoft Corporation",SERIALNUMBER="230865+470561",O="Microsoft Corporation","#;
+    let incorrect_publisher_subject = r#"CN="Microsoft Corporationn",L="Redmondd",O="Microsoft Corporationn",OU="Microsoft Corporationn",C="US",S="Washington""#;
+
+    let file_path = format!("{SIGNED_PATH}/microsoft_signed.exe");
+    let publisher_names = vec![String::from(incorrect_publisher_subject)];
+    let signature_status = verify_signature_by_publisher(file_path.to_string(), publisher_names);
+    let expected = TrustStatus {
+      message: "Publisher name does not match.".to_string(),
+      // message: format!("Publisher name does not match.\n\n Given: {correct_publisher_subject} \n\n Expected: {incorrect_publisher_subject}"),
+      subject: correct_publisher_subject.to_string(),
+      signed: false,
     };
     assert!(signature_status.is_ok());
     assert!(assert_trust_status_eq(

@@ -1,5 +1,8 @@
 use crate::wmi::wmi_variant::{process_variant, WMIVariant};
-use std::{boxed::Box, collections::HashMap, ffi::OsStr, os::windows::prelude::OsStrExt};
+use napi::{Env, Task};
+use std::{
+  boxed::Box, collections::HashMap, ffi::OsStr, os::windows::prelude::OsStrExt, sync::Mutex,
+};
 use windows::{
   core::{BSTR, PCWSTR},
   Win32::System::{
@@ -21,21 +24,89 @@ use windows::{
 
 pub type QueryResult = HashMap<String, Vec<Option<WMIVariant>>>;
 
+lazy_static! {
+  static ref SECURITY_INITIALIZER: Mutex<SecurityInitializer> =
+    Mutex::new(SecurityInitializer { initialized: false });
+}
+
+pub struct SecurityInitializer {
+  initialized: bool,
+}
+
+impl SecurityInitializer {
+  pub fn initialize(&mut self) -> napi::Result<()> {
+    if !self.initialized {
+      unsafe {
+        CoInitializeSecurity(
+          None,
+          -1,
+          None,
+          None,
+          RPC_C_AUTHN_LEVEL_DEFAULT,
+          RPC_C_IMP_LEVEL_IMPERSONATE,
+          None,
+          EOAC_NONE,
+          None,
+        )
+      }
+      .map_err(|_error| napi::Error::from_reason("Failed to initialize security"))?;
+      self.initialized = true;
+    }
+    Ok(())
+  }
+}
+
+pub struct AsyncWMIQuery {
+  pub namespace: String,
+  pub query: String,
+}
+impl AsyncWMIQuery {
+  pub fn new(namespace: String, query: String) -> Self {
+    AsyncWMIQuery { namespace, query }
+  }
+}
+
+#[napi]
+impl Task for AsyncWMIQuery {
+  type Output = QueryResult;
+  type JsValue = QueryResult;
+
+  fn compute(&mut self) -> napi::Result<Self::Output> {
+    let mut wmi = WMIQueryHandler::new(self.namespace.clone())?;
+    let result = wmi.execute_query(self.query.clone());
+    wmi.stop();
+    result
+  }
+
+  fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+    Ok(output)
+  }
+}
+
 #[derive(Debug)]
 pub struct WMIQueryHandler {
   server: Option<IWbemServices>, // Allows us to deref by setting to None
 }
 
 impl WMIQueryHandler {
-  pub fn new(service_type: String) -> napi::Result<Self> {
+  pub fn new(namespace: String) -> napi::Result<Self> {
     unsafe {
       CoInitializeEx(None, COINIT_MULTITHREADED)
         .map_err(|_error| napi::Error::from_reason("Failed to Initialize COM"))?;
     };
 
-    WMIQueryHandler::initialize_security()?;
+    let mut initializer = SECURITY_INITIALIZER.lock().map_err(|e| {
+      napi::Error::from_reason(format!("Failed to acquire lock: {}", e))
+    })?;
 
-    let server = WMIQueryHandler::connect_to_wmi_namespace(&service_type)?;
+    let result = initializer.initialize();
+    if let Err(_e) = result {
+      return Err(napi::Error::from_reason(
+        "Failed to initialize security, check if WMI is working correctly",
+      ));
+    }
+
+    let server = WMIQueryHandler::connect_to_wmi_namespace(&namespace)?;
 
     unsafe {
       let _ = CoSetProxyBlanket(
@@ -90,46 +161,19 @@ impl WMIQueryHandler {
     Ok(())
   }
 
-  pub fn initialize_security() -> napi::Result<()> {
-    unsafe {
-      CoInitializeSecurity(
-        None,
-        -1,
-        None,
-        None,
-        RPC_C_AUTHN_LEVEL_DEFAULT,
-        RPC_C_IMP_LEVEL_IMPERSONATE,
-        None,
-        EOAC_NONE,
-        None,
-      )
-    }
-    .map_err(|_error| napi::Error::from_reason("Failed to initialize security"))?;
-    Ok(())
-  }
-
   fn connect_to_wmi_namespace(namespace: &str) -> napi::Result<IWbemServices> {
     let locator: IWbemLocator =
       unsafe { CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER) }
         .map_err(|_e| napi::Error::new(napi::Status::GenericFailure, "Failed CoCreateInstance"))?;
 
-    let server: IWbemServices = unsafe {
-      locator.ConnectServer(
-        &BSTR::from(namespace.clone()),
-        None,
-        None,
-        None,
-        0,
-        None,
-        None,
-      )
-    }
-    .map_err(|_e| {
-      napi::Error::new(
-        napi::Status::GenericFailure,
-        format!("Failed to connect to {} server", namespace.clone()),
-      )
-    })?;
+    let server: IWbemServices =
+      unsafe { locator.ConnectServer(&BSTR::from(namespace), None, None, None, 0, None, None) }
+        .map_err(|_e| {
+          napi::Error::new(
+            napi::Status::GenericFailure,
+            format!("Failed to connect to {} server", namespace),
+          )
+        })?;
     Ok(server)
   }
 
@@ -243,7 +287,7 @@ impl WMIQueryHandler {
     query_result_map: &mut QueryResult,
     row_results: &IWbemClassObject,
   ) -> napi::Result<()> {
-    let variant_value = Default::default();
+    let variant_value: VARIANT = Default::default();
     let variant_ptr: *mut VARIANT = Box::into_raw(Box::new(variant_value));
 
     let safe_array: &SAFEARRAY =
@@ -260,6 +304,8 @@ impl WMIQueryHandler {
     }
 
     // Clean up Variant, safe array, and pointer
+    // If a VARIANT was created uninitialized don't call VariantClear. The .vt field would be empty and thus have garbage data.
+    // In this case it's not an issue because Default zero's all fields thus making vt VT_EMPTY
     unsafe {
       VariantClear(variant_ptr).map_err(|_error| {
         napi::Error::from_reason(format!(
@@ -310,18 +356,6 @@ mod test {
   }
 
   #[test]
-  fn failed_new_initialize_security() {
-    let failed_initialize_security = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
-    assert!(failed_initialize_security.is_ok());
-    let mut failed_initialize_query_handler = failed_initialize_security.unwrap();
-
-    let too_many_inits = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
-    assert!(too_many_inits.is_err());
-    assert!(&too_many_inits.is_err_and(|error| error.reason == "Failed to initialize security"));
-    failed_initialize_query_handler.stop();
-  }
-
-  #[test]
   fn failed_new_bad_namespace() {
     let bad_namespace = WMIQueryHandler::new(r#"bad\name"#.to_string());
     assert!(
@@ -335,7 +369,6 @@ mod test {
     let result = wmi_query_handler
       .execute_query(r#"SELECT Name, State FROM Win32_Service WHERE Name='Winmgmt'"#.to_string());
     assert!(&result.is_ok());
-    // TODO Check key/value
     wmi_query_handler.stop();
   }
 
@@ -351,16 +384,14 @@ mod test {
   }
 
   #[test]
-  #[ignore]
   fn success_change_namespace() {
     let mut wmi_query_handler = WMIQueryHandler::new(r#"root\cimv2"#.to_string()).unwrap();
     let result =
       wmi_query_handler.execute_query("SELECT Model FROM Win32_ComputerSystem".to_string());
     assert!(result.is_ok());
-    let change_result = wmi_query_handler.change_namespace(r#"root\SecurityCenter"#);
+    let change_result = wmi_query_handler.change_namespace(r#"root\wmi"#);
     assert!(change_result.is_ok());
-    let result =
-      wmi_query_handler.execute_query("SELECT ProductState FROM AntiVirusProduct".to_string());
+    let result = wmi_query_handler.execute_query("SELECT * FROM MS_SystemInformation".to_string());
     assert!(result.is_ok());
   }
 
@@ -369,7 +400,7 @@ mod test {
     let test_string = "hello";
     let test_utf16: Vec<u16> = OsStr::new(test_string)
       .encode_wide()
-      .chain(std::iter::once(0)) // Null-terminated
+      .chain(std::iter::once(0))
       .collect();
     let test_ptr: *const u16 = test_utf16.as_ptr();
 
@@ -380,21 +411,49 @@ mod test {
 
     unsafe {
       let psa = SafeArrayCreate(VT_UI2, 1, bounds.as_ptr() as *mut SAFEARRAYBOUND);
-      println!("1");
       if !psa.is_null() {
         let pv_data: *mut *const u16 = (*psa).pvData as *mut *const u16;
         *pv_data = test_ptr;
-        println!("2");
         let _ = SafeArrayLock(psa).unwrap();
-        println!("3");
-        println!("{:?}", psa);
-        println!("4");
         let result = safe_array_to_string(psa.as_ref().unwrap(), 0);
         assert_eq!(result, "hello");
-        println!("5");
         let _ = SafeArrayUnlock(psa);
         let _ = SafeArrayDestroy(psa);
       }
     }
+  }
+
+  #[test]
+  fn test_call_new_multiple_times() {
+    let wmi1 = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    let wmi2 = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    let wmi3 = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    assert!(wmi1.is_ok());
+    assert!(wmi2.is_ok());
+    assert!(wmi3.is_ok());
+    wmi1.unwrap().stop();
+    wmi2.unwrap().stop();
+  }
+
+  #[test]
+  fn test_async_query_can_be_called_while_sync_connection() {
+    let wmi_ok = WMIQueryHandler::new(r#"root\cimv2"#.to_string());
+    let mut async_wmi_query = AsyncWMIQuery::new(
+      r#"root\cimv2"#.to_string(),
+      "SELECT Model FROM Win32_ComputerSystem".to_string(),
+    );
+    let compute_result = async_wmi_query.compute();
+    assert!(compute_result.is_ok());
+    assert!(wmi_ok.is_ok());
+    let mut wmi = wmi_ok.unwrap();
+    let sync_query_result = wmi.execute_query("SELECT Model FROM Win32_ComputerSystem".to_string());
+    assert!(sync_query_result.is_ok());
+    wmi.stop();
+    let mut async_wmi_query2 = AsyncWMIQuery::new(
+      r#"root\cimv2"#.to_string(),
+      "SELECT Model FROM Win32_ComputerSystem".to_string(),
+    );
+    let compute_result2 = async_wmi_query2.compute();
+    assert!(compute_result2.is_ok());
   }
 }
