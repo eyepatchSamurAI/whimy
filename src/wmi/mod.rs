@@ -13,7 +13,7 @@ pub struct Wmi {
 
 #[napi]
 impl Wmi {
-  /// Allows the querying of an interal server that WMI can conenct to
+  /// Allows the querying of an internal server that WMI can connect to
   /// It's important that once you are done with making WMI calls you call stop()
   /// ```
   /// import {WMI} from 'wmi'
@@ -25,34 +25,54 @@ impl Wmi {
   /// wmi.stop();
   /// ```
   ///
-  /// Note: when passing in the service you watn to query use string literals
+  /// Note: when passing in the service you want to query use string literals
   ///
   #[napi(constructor)]
-  pub fn new(service_type: String) -> Result<Self> {
+  pub fn new(namespace: String) -> Result<Self> {
     Ok(Wmi {
-      query_handler: WMIQueryHandler::new(service_type)?,
+      query_handler: WMIQueryHandler::new(namespace)?,
     })
   }
 
-  /// Query the COM service previously initialized and get back a json response
-  ///
+  /// Creates an open connection with the Windows Management Instrumentation (WMI) service
+  /// and executes a synchronous query on the specified WMI namespace.
+  /// 
+  /// Note: Make sure to call `stop()` to release resources when you're done with WMI operations.
   /// ```
-  /// import {WMI} from 'wmi'
-  /// const wmi = new WMI(`root\\cimv2`);
-  /// const queryObject = wmi.query("Select * From Win32_processor");
+  /// import { Wmi } from 'wmi'
+  /// const wmi = new Wmi(`root\\cimv2`);
+  /// const queryObject = wmi.syncQuery("Select * From Win32_processor");
   /// wmi.stop();
   /// ```
   ///
   #[napi]
-  pub fn query(&self, query: String) -> Result<QueryResult> {
+  pub fn sync_query(&self, query: String) -> Result<QueryResult> {
     self.query_handler.execute_query(query)
   }
   
+  /// Asynchronously query the WMI service within a specified namespace to retrieve JSON-formatted management data.
+  /// Does not open a continuous connection. Once queried the WMI resources are released
+  ///
+  /// This function is non-blocking and returns an `AsyncTask` that you can await on the JavaScript side.
+  /// Ideal for running WMI queries that might take some time to complete, without blocking the main thread.
+  ///
+  /// ```javascript
+  /// import { Wmi } from 'wmi';
+  ///
+  /// async function fetchData() {
+  ///   const asyncQueryTask = Wmi.asyncQuery(`root\\cimv2`, "SELECT * FROM Win32_Processor");
+  ///   const queryResult = await asyncQueryTask;
+  ///   // Process queryResult
+  /// }
+  ///
+  /// fetchData();
+  /// ```
+  ///
   #[napi]
-  pub fn async_query(&self, namespace: String, query: String) -> AsyncTask<AsyncWMIQuery> {
+  pub fn async_query(namespace: String, query: String) -> AsyncTask<AsyncWMIQuery> {
     AsyncTask::new(AsyncWMIQuery {namespace, query})
   }
-
+  
   /// Change the namespace you are querying without having to make a new instance of Wmi
   ///
   /// ```

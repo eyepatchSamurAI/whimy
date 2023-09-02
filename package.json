@@ -28,13 +28,18 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@napi-rs/cli": "^2.16.3"
+    "@napi-rs/cli": "^2.16.3",
+    "ava": "^5.3.1"
+  },
+  "ava": {
+    "timeout": "3m"
   },
   "engines": {
     "node": ">= 10"
   },
   "scripts": {
     "napi": "napi",
+    "test": "ava test_node/*.test.*",
     "artifacts": "napi artifacts",
     "build": "napi build --platform --release build",
     "build:debug": "napi build --platform",
