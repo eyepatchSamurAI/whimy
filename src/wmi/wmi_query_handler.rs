@@ -95,9 +95,9 @@ impl WMIQueryHandler {
         .map_err(|_error| napi::Error::from_reason("Failed to Initialize COM"))?;
     };
 
-    let mut initializer = SECURITY_INITIALIZER.lock().map_err(|e| {
-      napi::Error::from_reason(format!("Failed to acquire lock: {}", e))
-    })?;
+    let mut initializer = SECURITY_INITIALIZER
+      .lock()
+      .map_err(|e| napi::Error::from_reason(format!("Failed to acquire lock: {}", e)))?;
 
     let result = initializer.initialize();
     if let Err(_e) = result {
