@@ -1,6 +1,7 @@
 [![npm version](https://badge.fury.io/js/whimy.svg)](https://badge.fury.io/js/whimy)
 ![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)
-[![whimy CI/CD](https://github.com/eyepatchSamurAI/whimy/actions/workflows/ci-prod.yml/badge.svg)](https://github.com/eyepatchSamurAI/whimy/actions/workflows/ci-prod.yml)[![codecov](https://codecov.io/gh/eyepatchSamurAI/whimy/graph/badge.svg?token=WCSPL1LGEF)](https://codecov.io/gh/eyepatchSamurAI/whimy)
+[![whimy CI/CD](https://github.com/eyepatchSamurAI/whimy/actions/workflows/ci-prod.yml/badge.svg)](https://github.com/eyepatchSamurAI/whimy/actions/workflows/ci-prod.yml)
+[![codecov](https://codecov.io/gh/eyepatchSamurAI/whimy/graph/badge.svg?token=WCSPL1LGEF)](https://codecov.io/gh/eyepatchSamurAI/whimy)
 
 # Whimy
 
@@ -27,10 +28,17 @@ By adopting Whimy, developers gain:
 import { Wmi } from 'whimy';
 
 const wmi = new Wmi(`root\\cimv2`);
-const queryString = wmi.syncQuery("Select * From Win32_processor");
-const query = JSON.parse(queryString);
-console.log(query);
+const result = wmi.syncQuery("Select * From Win32_processor");
+console.log(result);
 wmi.stop();
+```
+
+Make an async call to WMI
+```typescript
+import { Wmi } from 'whimy';
+
+const result = await Wmi.asyncQuery(`root\\cimv2`, "select Name, ProcessId from Win32_Process");
+console.log(result);
 ```
 
 ### File Signature Verification
@@ -42,6 +50,10 @@ const filePath = resolve(directoryName, 'path/to/file.exe');
 const output = verifySignatureByPublishName(filePath, ['CN="Microsoft Corporation",O="Microsoft Corporation",L=Redmond,S=Washington,C=US']);
 console.log(output);
 ```
+
+### Use Cases
+
+The most obvious use case is to gather system information, see the examples on how it can be done.
 
 ## Installation
 
