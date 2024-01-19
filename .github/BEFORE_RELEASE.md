@@ -5,4 +5,6 @@
 3. Format all changed rust files `cargo fmt` and `cargo clippy`
 4. Run rust tests `cargo tarpaulin --exclude-files "*\\mod.rs" --out Html -- --test-threads=1`
 5. Run node tests `yarn test`
-6. Make sure release CI/CD is passing
+6. Change the version number of `package.json` and `Cargo.toml`
+7. Make sure release CI/CD is passing
+8. Make PR against main
