@@ -45,7 +45,7 @@ impl Wmi {
   /// wmi.stop();
   /// ```
   ///
-  #[napi]
+  #[napi(ts_return_type = "{ [key: string]: unknown[] }")]
   pub fn sync_query(&self, query: String) -> Result<QueryResult> {
     self.query_handler.execute_query(query)
   }
@@ -68,7 +68,7 @@ impl Wmi {
   /// fetchData();
   /// ```
   ///
-  #[napi]
+  #[napi(ts_return_type = "Promise<{ [key: string]: unknown[] }>")]
   pub fn async_query(namespace: String, query: String) -> AsyncTask<AsyncWMIQuery> {
     AsyncTask::new(AsyncWMIQuery { namespace, query })
   }
