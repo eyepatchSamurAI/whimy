@@ -28,10 +28,17 @@ By adopting Whimy, developers gain:
 import { Wmi } from 'whimy';
 
 const wmi = new Wmi(`root\\cimv2`);
-const queryString = wmi.syncQuery("Select * From Win32_processor");
-const query = JSON.parse(queryString);
-console.log(query);
+const result = wmi.syncQuery("Select * From Win32_processor");
+console.log(result);
 wmi.stop();
+```
+
+Make an async call to WMI
+```typescript
+import { Wmi } from 'whimy';
+
+const result = await Wmi.asyncQuery(`root\\cimv2`, "select Name, ProcessId from Win32_Process");
+console.log(result);
 ```
 
 ### File Signature Verification
@@ -47,6 +54,7 @@ console.log(output);
 ### Use Cases
 
 The most obvious use case is to gather system information, see the examples on how it can be done.
+
 ## Installation
 
 `npm install whimy`
