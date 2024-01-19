@@ -7,4 +7,5 @@
 5. Run node tests `yarn test`
 6. Change the version number of `package.json` and `Cargo.toml`
 7. Make sure release CI/CD is passing
+8. Check git ci/cd credentials, personal access token does expire
 8. Make PR against main
