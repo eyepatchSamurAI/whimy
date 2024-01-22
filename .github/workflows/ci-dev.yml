@@ -25,21 +25,6 @@ jobs:
       - name: Install nightly
         run: rustup toolchain add nightly
 
-      - name: Install Tarpaulin
-        run: cargo install cargo-tarpaulin
-        shell: powershell
-        
-      - name: Install Dependencies
-        run: npm install
-      
-      - name: Build | Compile
-        run: npm run build
-        shell: powershell
-
-      - name: Get version from package.json
-        run: .\scripts\getVersion.ps1
-        shell: powershell
-
       - name: Cache npm dependencies
         uses: actions/cache@v2
         with:
@@ -58,6 +43,21 @@ jobs:
           key: ${{ runner.OS }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.OS }}-cargo-
+
+      - name: Install Tarpaulin
+        run: cargo install cargo-tarpaulin
+        shell: powershell
+        
+      - name: Install Dependencies
+        run: npm install
+      
+      - name: Build | Compile
+        run: npm run build
+        shell: powershell
+
+      - name: Get version from package.json
+        run: .\scripts\getVersion.ps1
+        shell: powershell
         
       - name: Format
         run: cargo fmt

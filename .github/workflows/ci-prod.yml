@@ -21,25 +21,10 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
-
+      
       - name: Install nightly
         run: rustup toolchain add nightly
-
-      - name: Install Tarpaulin
-        run: cargo install cargo-tarpaulin
-        shell: powershell
-      
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Build | Compile
-        run: npm run build
-        shell: powershell
-
-      - name: Get version from package.json
-        run: .\scripts\getVersion.ps1
-        shell: powershell
-    
+        
       - name: Cache npm dependencies
         uses: actions/cache@v2
         with:
@@ -58,6 +43,21 @@ jobs:
           key: ${{ runner.OS }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.OS }}-cargo-
+
+      - name: Install Tarpaulin
+        run: cargo install cargo-tarpaulin
+        shell: powershell
+      
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Npm Build
+        run: npm run build
+        shell: powershell
+
+      - name: Get version from package.json
+        run: .\scripts\getVersion.ps1
+        shell: powershell
 
       - name: Format
         run: cargo fmt
@@ -81,10 +81,10 @@ jobs:
       - name: Node install test async
         run: npm install
         working-directory: ./test_node
-      
+
       - name: Node test async
         run: npm run test
-      
+  
       - name: Create and push tag
         run: |
           git config --local user.email "action@github.com"
@@ -103,10 +103,6 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.MY_GITHUB_DEV_TOKEN }}  
-
-      - name: Npm Build | Compile
-        run: npm run build
-        shell: powershell
     
       - name: Authenticate with npm
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
@@ -115,5 +111,3 @@ jobs:
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  
