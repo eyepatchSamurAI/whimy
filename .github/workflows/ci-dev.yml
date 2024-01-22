@@ -1,5 +1,5 @@
 name: whimy-ci-dev
-run-name: ${{ github.run_id }} tests
+run-name: ${{ github.run_id }} Release CI/CD
 on:
   push:
     branches: 

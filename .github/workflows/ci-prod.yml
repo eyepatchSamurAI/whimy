@@ -1,5 +1,5 @@
 name: whimy-ci
-run-name: ${{ github.run_id }} tests
+run-name: ${{ github.run_id }} Prod CI/CD
 on:
   push:
     branches: 
